@@ -94,6 +94,7 @@ GPL-3.0-or-later ([COPYING](COPYING)). GPLv3 7(b) maddesi kapsamında ek şart: 
 
 **M. Burak Şentürk**
 - Web: [buraksenturk.net](https://buraksenturk.net)
+- E-posta: mburaksenturk@gmail.com
 - GitHub: [@mbrksntrk](https://github.com/mbrksntrk)
 - Proje: [github.com/mbrksntrk/dolibarr-isnet-nettefatura](https://github.com/mbrksntrk/dolibarr-isnet-nettefatura)
 
