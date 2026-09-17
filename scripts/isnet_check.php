@@ -21,7 +21,17 @@ if (substr($sapi_type, 0, 3) == 'cgi') {
 
 $path = __DIR__.'/';
 $_SERVER['SERVER_NAME'] = 'localhost';
-require $path.'../../../master.inc.php';
+// Works both from htdocs/custom/isnetefatura/scripts and htdocs/isnetefatura/scripts
+$res = 0;
+if (file_exists($path.'../../../master.inc.php')) {
+	$res = @include $path.'../../../master.inc.php';
+}
+if (!$res && file_exists($path.'../../master.inc.php')) {
+	$res = @include $path.'../../master.inc.php';
+}
+if (!$res) {
+	die("Include of master fails\n");
+}
 dol_include_once('/isnetefatura/class/isnetclient.class.php');
 
 $vkn = $argv[1] ?? '';

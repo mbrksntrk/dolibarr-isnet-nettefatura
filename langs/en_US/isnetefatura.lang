@@ -1,8 +1,8 @@
 # Copyright (C) 2026 M. Burak Şentürk <https://buraksenturk.net>
 # Licensed under GPL-3.0-or-later with attribution terms. See COPYING and ATTRIBUTION.md.
 
-Module500130Name=İşNet e-Invoice
-Module500130Desc=Turkish e-Fatura / e-Arşiv submission through the İşNet integrator (GİB)
+Module499100Name=İşNet e-Invoice
+Module499100Desc=Turkish e-Fatura / e-Arşiv submission through the İşNet integrator (GİB)
 
 #
 # Setup

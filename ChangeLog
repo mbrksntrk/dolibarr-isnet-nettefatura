@@ -1,3 +1,7 @@
+0.4.1 (2026-09-17)
+- Modül numarası 499100 (wiki.dolibarr.org rezerve aralığı; DoliStore kuralı). Yetki kimlikleri değişti: modülü kapatıp açın ve kullanıcı yetkilerini yeniden verin.
+- Sayfalar standart main.inc.php yükleme bloğunu kullanır (htdocs/custom altında ya da doğrudan htdocs altında çalışır); CLI betiği her iki konumu destekler.
+
 0.4.0 (2026-09-17)
 - Lisans: GPL-3.0-or-later + yazar atfı şartı (ATTRIBUTION.md); yazar ve proje bilgileri README/modül tanımında.
 - Dolibarr 24 AI/MCP entegrasyonu (addMcpTools hook): isnet_invoice_status, isnet_send_invoice, isnet_refresh_status, isnet_list_documents, isnet_check_taxpayer, isnet_list_incoming, isnet_sync_incoming, isnet_import_incoming, isnet_reply_incoming, isnet_balance. Araçlar MCP kullanıcısının Dolibarr ve modül yetkileriyle çalışır.

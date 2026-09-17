@@ -12,7 +12,7 @@ class modIsnetEfatura extends DolibarrModules
 		global $conf, $langs;
 
 		$this->db = $db;
-		$this->numero = 500130;
+		$this->numero = 499100; // reserved on wiki.dolibarr.org List_of_modules_id (M. Burak Şentürk: 499100-499119)
 		$this->rights_class = 'isnetefatura';
 		$this->family = 'financial';
 		$this->module_position = '90';
@@ -21,7 +21,7 @@ class modIsnetEfatura extends DolibarrModules
 		$this->descriptionlong = 'Dolibarr müşteri faturalarını İşNet SOAP web servisi üzerinden e-Fatura veya e-Arşiv olarak GİB\'e iletir.';
 		$this->editor_name = 'M. Burak Şentürk';
 		$this->editor_url = 'https://buraksenturk.net';
-		$this->version = '0.4.0';
+		$this->version = '0.4.1';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'bill';
 
@@ -148,15 +148,15 @@ class modIsnetEfatura extends DolibarrModules
 
 		$this->rights = array();
 		$r = 0;
-		$this->rights[$r][0] = $this->numero + 1;
+		$this->rights[$r][0] = $this->numero * 10 + 1;
 		$this->rights[$r][1] = 'e-Fatura durumlarını görüntüle';
 		$this->rights[$r][4] = 'read';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 2;
+		$this->rights[$r][0] = $this->numero * 10 + 2;
 		$this->rights[$r][1] = 'e-Fatura gönder';
 		$this->rights[$r][4] = 'send';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 3;
+		$this->rights[$r][0] = $this->numero * 10 + 3;
 		$this->rights[$r][1] = 'e-Fatura ayarlarını yönet';
 		$this->rights[$r][4] = 'setup';
 
