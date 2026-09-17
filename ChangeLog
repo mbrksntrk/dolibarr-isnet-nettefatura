@@ -1,0 +1,25 @@
+0.4.0 (2026-09-17)
+- Lisans: GPL-3.0-or-later + yazar atfı şartı (ATTRIBUTION.md); yazar ve proje bilgileri README/modül tanımında.
+- Dolibarr 24 AI/MCP entegrasyonu (addMcpTools hook): isnet_invoice_status, isnet_send_invoice, isnet_refresh_status, isnet_list_documents, isnet_check_taxpayer, isnet_list_incoming, isnet_sync_incoming, isnet_import_incoming, isnet_reply_incoming, isnet_balance. Araçlar MCP kullanıcısının Dolibarr ve modül yetkileriyle çalışır.
+
+0.3.1 (2026-09-17)
+- TRTevkifat modülü entegrasyonu: tevkifat satırı (special_code 99) UBL satırlarına girmez, kod/oran trtevkifat ek alanlarından da okunur, toplamlar satırlardan hesaplanır (TotalPayableAmount = brüt − tevkifat)
+
+0.3.0 (2026-09-17)
+- e-İrsaliye: sevkiyat onayında/elle gönderim, sürücü/plaka/taşıyıcı, durum ve PDF; gelen irsaliyeler ve alındı yanıtı
+- e-Arşiv: iptal, e-posta tekrar gönderimi, internet satışı bilgileri (WebSellingInfo)
+- e-Fatura: KAMU senaryosu, irsaliye referansı (bağlı sevkiyat + elle), Dolibarr PDF eki, XSLT/logo şablonu, fatura seviyesinde istisna bloğu
+- Denetim kayıtları: belge olayları Olaylar sekmesinde, ayar değişiklikleri güvenlik denetim günlüğünde
+- "Oluşturuldu" durumu; tekrar gönderim yalnız başarısız denemede; sekme açılışında otomatik durum yenileme
+- Kontör bakiyesi ve şube listesi bağlantı testinde; düşük kontör uyarısı
+- Belgeler tablosunda element_type (fatura/sevkiyat), gelen tabloda doc_kind (fatura/irsaliye)
+
+0.2.0 (2026-09-16)
+- Fatura gönderimi: Onayla + Gönder, e-Fatura/e-Arşiv otomatik kararı (sorgula/önbellekle/manuel), fatura sekmesi
+- GİB il/ilçe/vergi dairesi kod listeleri ve isimden kod çözümleme
+- Durum takibi (cron), imzalı PDF kaydı, liste alanları, Türkçe Prof ID etiketleri
+- İhracat (mal → GTB e-Fatura, hizmet → yurtdışı e-Arşiv), tevkifat, e-Arşiv iade
+- Gelen e-Faturalar: senkron, taslak tedarikçi faturasına aktarım, kabul/red
+
+0.1.0 (2026-09-16)
+- SOAP istemcisi, ayar sayfası, bağlantı testi, CLI kontrol scripti
