@@ -12,7 +12,7 @@ class modIsnetEfatura extends DolibarrModules
 		global $conf, $langs;
 
 		$this->db = $db;
-		$this->numero = 499100; // reserved on wiki.dolibarr.org List_of_modules_id (M. Burak Şentürk: 499100-499119)
+		$this->numero = 194091; // reserved on wiki.dolibarr.org List_of_modules_id (M. Burak Şentürk: 194091-194100)
 		$this->rights_class = 'isnetefatura';
 		$this->family = 'financial';
 		$this->module_position = '90';

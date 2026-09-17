@@ -1,5 +1,5 @@
 0.4.1 (2026-09-17)
-- Modül numarası 499100 (wiki.dolibarr.org rezerve aralığı; DoliStore kuralı). Yetki kimlikleri değişti: modülü kapatıp açın ve kullanıcı yetkilerini yeniden verin.
+- Modül numarası 194091 (wiki.dolibarr.org rezerve aralığı; DoliStore kuralı). Yetki kimlikleri değişti: modülü kapatıp açın ve kullanıcı yetkilerini yeniden verin.
 - Sayfalar standart main.inc.php yükleme bloğunu kullanır (htdocs/custom altında ya da doğrudan htdocs altında çalışır); CLI betiği her iki konumu destekler.
 
 0.4.0 (2026-09-17)

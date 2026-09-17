@@ -1,8 +1,8 @@
 # Copyright (C) 2026 M. Burak Şentürk <https://buraksenturk.net>
 # Licensed under GPL-3.0-or-later with attribution terms. See COPYING and ATTRIBUTION.md.
 
-Module499100Name=İşNet e-Fatura
-Module499100Desc=İşNet üzerinden e-Fatura / e-Arşiv gönderimi (GİB özel entegratör)
+Module194091Name=İşNet e-Fatura
+Module194091Desc=İşNet üzerinden e-Fatura / e-Arşiv gönderimi (GİB özel entegratör)
 
 #
 # Setup
