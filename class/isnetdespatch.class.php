@@ -371,7 +371,7 @@ class IsnetDespatch
 		$r = $list[0];
 		$doc->status = (string) ($r->Status ?? $doc->status);
 		$doc->detail_status = (string) ($r->DetailStatus ?? '');
-		$doc->last_error = preg_match('/Hata|Reddedildi/i', $doc->status.' '.$doc->detail_status) ? trim((string) ($r->SystemResponseDescription ?? '')) : '';
+		$doc->last_error = preg_match('/Hata|Reddedildi|Gonderilemedi|Basarisiz/i', $doc->status.' '.$doc->detail_status) ? trim((string) ($r->SystemResponseDescription ?? '')) : '';
 		if (!empty($r->DespatchAdviceNumber)) {
 			$doc->invoice_number = (string) $r->DespatchAdviceNumber;
 		}

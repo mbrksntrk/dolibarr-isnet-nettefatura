@@ -210,7 +210,15 @@ class IsnetDocument
 	const FINAL_FAIL = array(
 		'Gib_Tarafinda_Hata_Olustu', 'Sistem_Hatasi', 'Reddedildi', 'Alici_Reddetti', 'Alici_Iade_Etti', 'Iade_Edildi',
 		'Silindi', 'Gibe_Gonderilirken_Sistem_Hatasi_Olustu', 'Fatura_Iptale_Konu_Edildi',
+		'Dokuman_Bulunan_Adrese_Gonderilemedi', 'Hedeften_Sistem_Yaniti_Basarisiz_Geldi',
 	);
+	/**
+	 * States that end the story only where no application response (uygulama yanıtı) is due:
+	 * in TEMELFATURA the receiver's system response is the last step, while TİCARİFATURA,
+	 * KAMU and İHRACAT still await the receiver's accept/reject.
+	 */
+	const FINAL_OK_WITHOUT_APP_RESPONSE = array('Zarf_Basariyla_Islendi');
+	const SCENARIOS_WITHOUT_APP_RESPONSE = array('TEMELFATURA');
 
 	/**
 	 * @return string 'ok' (final) | 'issued' (signed & transmitted, GİB report/response pending) | 'fail' | 'pending' | 'error' (never reached the integrator)
@@ -269,6 +277,13 @@ class IsnetDocument
 		foreach ($states as $s) {
 			if (in_array($s, self::FINAL_OK, true)) {
 				return 'ok';
+			}
+		}
+		if (in_array($this->scenario, self::SCENARIOS_WITHOUT_APP_RESPONSE, true)) {
+			foreach ($states as $s) {
+				if (in_array($s, self::FINAL_OK_WITHOUT_APP_RESPONSE, true)) {
+					return 'ok';
+				}
 			}
 		}
 		return '';
@@ -394,8 +409,11 @@ class IsnetDocument
 		};
 		$okIn = $quote(self::FINAL_OK);
 		$failIn = $quote(self::FINAL_FAIL);
+		$basicOkIn = $quote(self::FINAL_OK_WITHOUT_APP_RESPONSE);
+		$noAppIn = $quote(self::SCENARIOS_WITHOUT_APP_RESPONSE);
 		$hasEttn = "d.ettn IS NOT NULL AND d.ettn <> ''";
-		$isOk = "(d.status IN (".$okIn.") OR d.detail_status IN (".$okIn."))";
+		$isOk = "((d.status IN (".$okIn.") OR d.detail_status IN (".$okIn."))"
+			." OR (d.scenario IN (".$noAppIn.") AND (d.status IN (".$basicOkIn.") OR d.detail_status IN (".$basicOkIn."))))";
 		$isFail = "(d.status IN (".$failIn.") OR d.detail_status IN (".$failIn."))";
 
 		switch ($outcome) {

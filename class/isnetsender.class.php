@@ -354,7 +354,7 @@ class IsnetSender
 			$doc->status = (string) ($remote->Status ?? $doc->status);
 			$doc->detail_status = (string) ($remote->DetailStatus ?? '');
 			// SystemResponseDescription is also filled for transient states; keep it only for real failures.
-			$doc->last_error = preg_match('/Hata|Reddedildi|Iade_Edildi/i', $doc->status.' '.$doc->detail_status)
+			$doc->last_error = preg_match('/Hata|Reddedildi|Iade_Edildi|Gonderilemedi|Basarisiz/i', $doc->status.' '.$doc->detail_status)
 				? trim((string) ($remote->SystemResponseDescription ?? ''))
 				: '';
 		}

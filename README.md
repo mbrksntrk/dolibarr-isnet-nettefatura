@@ -8,7 +8,7 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 | Dolibarr | 20.0+ (24.0 üzerinde geliştirildi ve test edildi) |
 | PHP | 8.1+, `soap`, `curl`, `mbstring` eklentileri |
 | Lisans | GPL-3.0-or-later + yazar atfı şartı ([ATTRIBUTION.md](ATTRIBUTION.md)) |
-| Sürüm | 0.5.0 |
+| Sürüm | 0.5.1 |
 
 ## Neler yapıyor
 

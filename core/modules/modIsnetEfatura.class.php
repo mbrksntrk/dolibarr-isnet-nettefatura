@@ -21,7 +21,7 @@ class modIsnetEfatura extends DolibarrModules
 		$this->descriptionlong = 'Dolibarr müşteri faturalarını İşNet SOAP web servisi üzerinden e-Fatura veya e-Arşiv olarak GİB\'e iletir.';
 		$this->editor_name = 'M. Burak Şentürk';
 		$this->editor_url = 'https://buraksenturk.net';
-		$this->version = '0.5.0';
+		$this->version = '0.5.1';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'bill';
 

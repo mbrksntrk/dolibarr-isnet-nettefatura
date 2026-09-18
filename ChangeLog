@@ -1,3 +1,8 @@
+0.5.1 (2026-09-18)
+- Durum yorumlaması: "Dokuman_Bulunan_Adrese_Gonderilemedi" ve "Hedeften_Sistem_Yaniti_Basarisiz_Geldi" artık başarısızlık sayılır (önceden "Oluşturuldu" görünüyordu)
+- TEMELFATURA'da "Zarf_Basariyla_Islendi" nihai başarı sayılır; uygulama yanıtı beklenen senaryolarda (TİCARİFATURA, KAMU, İHRACAT) beklemeye devam eder
+- Başarısız durumlarda İşNet'in açıklaması (SystemResponseDescription) son hata alanına yazılır
+
 0.5.0 (2026-09-18)
 - Fatura menüsünde "e-Faturalar" bölümü: Gönderilen e-Faturalar, Gelen e-Faturalar, Gönderilen e-İrsaliyeler, Gelen e-İrsaliyeler
 - Yeni sayfa: gönderilen belgeler listesi (outgoing.php) — arama, duruma göre filtre, sayfalama, tek tek veya toplu durum yenileme, PDF kaydetme
