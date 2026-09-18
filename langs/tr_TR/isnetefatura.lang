@@ -344,3 +344,13 @@ IsnetReceiptSent=Alındı (irsaliye yanıtı) gönderildi
 IsnetErrNotDespatch=Bu kayıt bir irsaliye değil.
 ISNETEFATURA_CRON_USER_ID=Cron kullanıcı id
 ISNETEFATURA_CRON_USER_IDHelp=Zamanlanmış görevlerin (durum yenileme, senkron) yazdığı olay/denetim kayıtlarında sahip olarak görünecek Dolibarr kullanıcısının id'si.
+
+# --- e-Faturalar menusu / gonderilen belge listesi
+IsnetMenuTitle=e-Faturalar
+IsnetOutgoingTitle=Gönderilen e-Faturalar
+IsnetOutgoingDespatchTitle=Gönderilen e-İrsaliyeler
+IsnetOutgoingEmpty=Gönderilmiş belge yok
+IsnetOutgoingCount=%s belge
+IsnetAllStates=Tüm durumlar
+IsnetRefreshPending=Bekleyen durumları güncelle
+IsnetRefreshedCount=%s belgenin durumu güncellendi

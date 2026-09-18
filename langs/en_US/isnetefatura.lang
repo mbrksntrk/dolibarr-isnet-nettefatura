@@ -344,3 +344,13 @@ IsnetReceiptSent=Receipt advice sent
 IsnetErrNotDespatch=This record is not a despatch advice.
 ISNETEFATURA_CRON_USER_ID=Cron user id
 ISNETEFATURA_CRON_USER_IDHelp=Dolibarr user id shown as owner on events/audit entries written by scheduled jobs.
+
+# --- e-Fatura menu / list of sent documents
+IsnetMenuTitle=e-Fatura
+IsnetOutgoingTitle=Outgoing e-Fatura
+IsnetOutgoingDespatchTitle=Outgoing e-İrsaliye
+IsnetOutgoingEmpty=No document sent yet
+IsnetOutgoingCount=%s documents
+IsnetAllStates=All states
+IsnetRefreshPending=Refresh pending statuses
+IsnetRefreshedCount=%s document statuses refreshed

@@ -8,7 +8,7 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 | Dolibarr | 20.0+ (24.0 üzerinde geliştirildi ve test edildi) |
 | PHP | 8.1+, `soap`, `curl`, `mbstring` eklentileri |
 | Lisans | GPL-3.0-or-later + yazar atfı şartı ([ATTRIBUTION.md](ATTRIBUTION.md)) |
-| Sürüm | 0.4.1 |
+| Sürüm | 0.5.0 |
 
 ## Neler yapıyor
 
@@ -22,6 +22,10 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 **Gelen belgeler**
 - Tedarikçi **e-Faturaları** listelenir, tek tıkla taslak tedarikçi faturasına aktarılır (cari otomatik açılır, PDF eklenir), ticari faturalara **kabul/red** yanıtı
 - Gelen **e-İrsaliyeler** listelenir, **alındı yanıtı** gönderilir
+
+**Menü**
+- Fatura menüsünde **e-Faturalar** bölümü: Gönderilen e-Faturalar, Gelen e-Faturalar, Gönderilen e-İrsaliyeler, Gelen e-İrsaliyeler
+- Gönderilen belgeler listesi: arama, duruma göre filtre, sayfalama, tek tek ya da toplu durum yenileme, imzalı PDF kaydı
 
 **Altyapı**
 - GİB il / ilçe / vergi dairesi kod listeleri yerel önbellekte; cari kartındaki serbest metinden kod çözümleme

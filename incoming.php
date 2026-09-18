@@ -114,7 +114,8 @@ if (($action === 'accept' || $action === 'reject') && $id > 0 && $canAct) {
 /* ------------------------------------------------------------------ view */
 
 $form = new Form($db);
-llxHeader('', $langs->trans('IsnetIncomingTitle'));
+$title = $langs->trans($kind === 'DESPATCH' ? 'IsnetIncomingDespatches' : 'IsnetIncomingInvoices');
+llxHeader('', $title);
 
 $list = (new IsnetIncoming($db))->fetchAll(array('search' => $search, 'unlinked' => $onlyUnlinked, 'kind' => $kind));
 
@@ -122,7 +123,7 @@ $morehtml = '';
 if ($canAct) {
 	$morehtml = '<a class="butAction" href="'.$_SERVER['PHP_SELF'].'?action=sync&token='.newToken().'&kind='.$kind.'&unlinked='.$onlyUnlinked.'">'.$langs->trans('IsnetIncomingSync').'</a>';
 }
-print load_fiche_titre($langs->trans('IsnetIncomingTitle'), $morehtml, 'supplier_invoice');
+print load_fiche_titre($title, $morehtml, $kind === 'DESPATCH' ? 'dolly' : 'supplier_invoice');
 print '<div class="tabBar"><a class="'.($kind === 'INVOICE' ? 'butAction' : 'butActionSmall').'" href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE">'.$langs->trans('IsnetIncomingInvoices').'</a> <a class="'.($kind === 'DESPATCH' ? 'butAction' : 'butActionSmall').'" href="'.$_SERVER['PHP_SELF'].'?kind=DESPATCH">'.$langs->trans('IsnetIncomingDespatches').'</a></div><br>';
 print '<span class="opacitymedium">'.$langs->trans('IsnetIncomingDesc', getDolGlobalInt('ISNETEFATURA_INCOMING_DAYS', 30)).'</span><br><br>';
 

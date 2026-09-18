@@ -21,7 +21,7 @@ class modIsnetEfatura extends DolibarrModules
 		$this->descriptionlong = 'Dolibarr müşteri faturalarını İşNet SOAP web servisi üzerinden e-Fatura veya e-Arşiv olarak GİB\'e iletir.';
 		$this->editor_name = 'M. Burak Şentürk';
 		$this->editor_url = 'https://buraksenturk.net';
-		$this->version = '0.4.1';
+		$this->version = '0.5.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'bill';
 
@@ -160,18 +160,80 @@ class modIsnetEfatura extends DolibarrModules
 		$this->rights[$r][1] = 'e-Fatura ayarlarını yönet';
 		$this->rights[$r][4] = 'setup';
 
+		// "e-Faturalar" section of the Billing left menu: sent/received e-Fatura and e-İrsaliye
+		$enabledBase = 'isModEnabled("isnetefatura")';
+		$enabledIncoming = $enabledBase.' && getDolGlobalInt("ISNETEFATURA_INCOMING_ENABLED", 1)';
+		$enabledDespatch = $enabledBase.' && isModEnabled("expedition") && getDolGlobalInt("ISNETEFATURA_DESPATCH_ENABLED", 1)';
+		$perms = '$user->hasRight("isnetefatura", "read")';
 		$this->menu = array(
 			array(
 				'fk_menu' => 'fk_mainmenu=billing',
 				'type' => 'left',
-				'titre' => 'IsnetIncomingTitle',
+				'titre' => 'IsnetMenuTitle',
+				'prefix' => '<span class="fas fa-file-invoice pictofixedwidth paddingright"></span>',
 				'mainmenu' => 'billing',
-				'leftmenu' => 'isnetefatura_incoming',
-				'url' => '/isnetefatura/incoming.php',
+				'leftmenu' => 'isnetefatura',
+				'url' => '/isnetefatura/outgoing.php',
 				'langs' => 'isnetefatura@isnetefatura',
 				'position' => 1000,
-				'enabled' => 'isModEnabled("isnetefatura") && getDolGlobalInt("ISNETEFATURA_INCOMING_ENABLED", 1)',
-				'perms' => '$user->hasRight("isnetefatura", "read")',
+				'enabled' => $enabledBase,
+				'perms' => $perms,
+				'target' => '',
+				'user' => 2,
+			),
+			array(
+				'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=isnetefatura',
+				'type' => 'left',
+				'titre' => 'IsnetOutgoingTitle',
+				'mainmenu' => 'billing',
+				'leftmenu' => 'isnetefatura_outgoing',
+				'url' => '/isnetefatura/outgoing.php?kind=INVOICE',
+				'langs' => 'isnetefatura@isnetefatura',
+				'position' => 1001,
+				'enabled' => $enabledBase,
+				'perms' => $perms,
+				'target' => '',
+				'user' => 2,
+			),
+			array(
+				'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=isnetefatura',
+				'type' => 'left',
+				'titre' => 'IsnetIncomingInvoices',
+				'mainmenu' => 'billing',
+				'leftmenu' => 'isnetefatura_incoming',
+				'url' => '/isnetefatura/incoming.php?kind=INVOICE',
+				'langs' => 'isnetefatura@isnetefatura',
+				'position' => 1002,
+				'enabled' => $enabledIncoming,
+				'perms' => $perms,
+				'target' => '',
+				'user' => 2,
+			),
+			array(
+				'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=isnetefatura',
+				'type' => 'left',
+				'titre' => 'IsnetOutgoingDespatchTitle',
+				'mainmenu' => 'billing',
+				'leftmenu' => 'isnetefatura_outgoing_despatch',
+				'url' => '/isnetefatura/outgoing.php?kind=DESPATCH',
+				'langs' => 'isnetefatura@isnetefatura',
+				'position' => 1003,
+				'enabled' => $enabledDespatch,
+				'perms' => $perms,
+				'target' => '',
+				'user' => 2,
+			),
+			array(
+				'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=isnetefatura',
+				'type' => 'left',
+				'titre' => 'IsnetIncomingDespatches',
+				'mainmenu' => 'billing',
+				'leftmenu' => 'isnetefatura_incoming_despatch',
+				'url' => '/isnetefatura/incoming.php?kind=DESPATCH',
+				'langs' => 'isnetefatura@isnetefatura',
+				'position' => 1004,
+				'enabled' => $enabledIncoming.' && '.$enabledDespatch,
+				'perms' => $perms,
 				'target' => '',
 				'user' => 2,
 			),

@@ -25,7 +25,7 @@ Aktivasyonda otomatik oluşanlar:
 - Tablolar: `llx_isnetefatura_document` (gönderim denemeleri), `llx_isnetefatura_incoming` (gelen belgeler), `llx_isnetefatura_code` (GİB kod listeleri)
 - Ek alanlar: cari (e-Fatura durumu, posta kutusu, e-İrsaliye posta kutusu), fatura (senaryo, tip, istisna, tevkifat, ihracat, internet satışı, irsaliye no, e-belge no/durumu), ürün (GTİP, menşei), sevkiyat (plaka, sürücü, taşıyıcı)
 - Cron görevleri: `IsnetCronRefreshStatuses` (saatlik), `IsnetCronSyncIncoming` (saatlik)
-- Fatura ve sevkiyat kartlarına sekme, Faturalama menüsüne "Gelen e-Faturalar"
+- Fatura ve sevkiyat kartlarına sekme, Faturalama menüsüne **e-Faturalar** bölümü (Gönderilen/Gelen e-Faturalar, Gönderilen/Gelen e-İrsaliyeler)
 - Çeviri override: Prof ID 1–4 etiketleri Türkçe (kapatılabilir)
 
 ### 3. Şirket bilgileri

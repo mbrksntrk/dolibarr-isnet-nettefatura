@@ -38,7 +38,14 @@ Durum kodları hakkında: e-Arşiv belgeleri GİB'e günlük toplu raporla bildi
 2. **Onayla** → e-İrsaliye gönderilir (ayar). Sevkiyat kartı → **e-İrsaliye** sekmesi: aynı rozet/ikonlar.
 3. Alıcı e-İrsaliye mükellefi değilse gönderilmez, uyarı verir (kâğıt irsaliye).
 
-## Gelen belgeler (Faturalama → Gelen e-Faturalar)
+## Gönderilen belgeler (Faturalama → e-Faturalar → Gönderilen e-Faturalar / e-İrsaliyeler)
+
+- Her gönderim denemesi bir satır: tarih, fatura/sevkiyat referansı (tıklanınca ilgili e-belge sekmesi), cari, belge tipi ve senaryo, İşNet numarası, ETTN, durum rozeti + ham İşNet durumu, son hata.
+- **Arama** (fatura no, ETTN, referans, cari) ve **duruma göre filtre**: İşleniyor / Tamamlandı / Başarısız / Gönderilemedi.
+- Satır sonundaki ikonlar: **durumu yenile**, **imzalı PDF'i belgelere kaydet**.
+- Üstteki **Bekleyen durumları güncelle** düğmesi, nihai duruma gelmemiş belgeleri (en çok 50) tek seferde İşNet'e sorar — saatlik cron'u beklemeden.
+
+## Gelen belgeler (Faturalama → e-Faturalar → Gelen e-Faturalar / e-İrsaliyeler)
 
 - **Gelen e-Faturalar:** saatte bir senkronlanır ("Şimdi senkronize et" de var). Her satırda gönderici, tutarlar, İşNet durumu, yanıt, bağlı tedarikçi faturası.
   - **Aktar:** taslak tedarikçi faturası (satırlar, KDV, döviz, İşNet PDF'i ekli) → tedarikçi faturası kartına gider; ürün eşleme, muhasebe kodu, onay, ödeme Dolibarr'da devam eder. Gönderici VKN'si hiçbir caride yoksa tedarikçi otomatik açılır (ayar).

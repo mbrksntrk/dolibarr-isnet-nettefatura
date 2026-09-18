@@ -46,7 +46,7 @@ Kurulum → Modüller → İşNet e-Fatura ⚙. Her ayar bir `ISNETEFATURA_*` sa
 
 | Ayar | Varsayılan | Açıklama |
 |---|---|---|
-| Gelen e-Faturaları senkronize et | açık | Saatlik cron + Faturalama menüsünde sayfa. e-İrsaliye açıksa gelen irsaliyeler de. |
+| Gelen e-Faturaları senkronize et | açık | Saatlik cron + Faturalama → e-Faturalar → Gelen e-Faturalar sayfası. e-İrsaliye açıksa gelen irsaliyeler de. |
 | Geriye dönük gün | 30 | Senkron penceresi. |
 | Tedarikçi carisini otomatik oluştur | açık | VKN eşleşmezse e-Faturadaki bilgilerle tedarikçi açılır. |
 

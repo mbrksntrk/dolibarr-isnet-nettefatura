@@ -47,6 +47,11 @@ class IsnetDocument
 	public $fk_user_send = 0;
 	public $date_creation = null;
 
+	// Filled by fetchList() only (source object summary for list screens)
+	public $obj_ref = '';
+	public $obj_socid = 0;
+	public $soc_name = '';
+
 	public function __construct($db)
 	{
 		$this->db = $db;
@@ -324,5 +329,86 @@ class IsnetDocument
 			}
 		}
 		return $list;
+	}
+
+	/**
+	 * Paged list of submissions for the "sent documents" screens, joined with the source
+	 * object so the list can show its ref and third party without fetching each one.
+	 *
+	 * $params: element, search, outcome (ok|issued|pending|fail|error), limit, offset
+	 * Each returned document also carries ->obj_ref, ->obj_socid and ->soc_name.
+	 *
+	 * @return IsnetDocument[] newest first
+	 */
+	public function fetchList($params = array(), &$total = 0)
+	{
+		$list = array();
+		$element = isset($params['element']) ? $params['element'] : self::ELEMENT_INVOICE;
+		$table = ($element === self::ELEMENT_SHIPMENT ? 'expedition' : 'facture');
+		$search = isset($params['search']) ? trim((string) $params['search']) : '';
+		$outcome = isset($params['outcome']) ? (string) $params['outcome'] : '';
+		$limit = isset($params['limit']) ? (int) $params['limit'] : 50;
+		$offset = isset($params['offset']) ? (int) $params['offset'] : 0;
+
+		$where = " WHERE d.element_type = '".$this->db->escape($element)."'"
+			.' AND d.entity IN ('.getEntity('invoice').')';
+		if ($search !== '') {
+			$e = $this->db->escape($this->db->escapeforlike($search));
+			$where .= " AND (d.invoice_number LIKE '%".$e."%' OR d.ettn LIKE '%".$e."%' OR d.external_code LIKE '%".$e."%'"
+				." OR o.ref LIKE '%".$e."%' OR s.nom LIKE '%".$e."%')";
+		}
+		$where .= $this->outcomeSqlFilter($outcome);
+
+		$from = ' FROM '.MAIN_DB_PREFIX.self::TABLE.' as d'
+			.' LEFT JOIN '.MAIN_DB_PREFIX.$table.' as o ON o.rowid = d.fk_facture'
+			.' LEFT JOIN '.MAIN_DB_PREFIX.'societe as s ON s.rowid = o.fk_soc';
+
+		$res = $this->db->query('SELECT COUNT(*) as nb'.$from.$where);
+		$total = $res ? (int) $this->db->fetch_object($res)->nb : 0;
+
+		$sql = 'SELECT d.*, o.ref as obj_ref, o.fk_soc as obj_socid, s.nom as soc_name'.$from.$where
+			.' ORDER BY d.rowid DESC'.$this->db->plimit($limit, $offset);
+		$res = $this->db->query($sql);
+		if (!$res) {
+			$this->error = $this->db->lasterror();
+			return $list;
+		}
+		while ($obj = $this->db->fetch_object($res)) {
+			$d = new IsnetDocument($this->db);
+			$d->hydrate($obj);
+			$d->obj_ref = (string) $obj->obj_ref;
+			$d->obj_socid = (int) $obj->obj_socid;
+			$d->soc_name = (string) $obj->soc_name;
+			$list[] = $d;
+		}
+		return $list;
+	}
+
+	/**
+	 * SQL translation of outcome(), so the list can be filtered and paged in the database.
+	 */
+	private function outcomeSqlFilter($outcome)
+	{
+		$quote = function ($states) {
+			return "'".implode("','", array_map(array($this->db, 'escape'), $states))."'";
+		};
+		$okIn = $quote(self::FINAL_OK);
+		$failIn = $quote(self::FINAL_FAIL);
+		$hasEttn = "d.ettn IS NOT NULL AND d.ettn <> ''";
+		$isOk = "(d.status IN (".$okIn.") OR d.detail_status IN (".$okIn."))";
+		$isFail = "(d.status IN (".$failIn.") OR d.detail_status IN (".$failIn."))";
+
+		switch ($outcome) {
+			case 'ok':
+				return ' AND '.$hasEttn.' AND NOT '.$isFail.' AND '.$isOk;
+			case 'fail':
+				return ' AND '.$hasEttn.' AND '.$isFail;
+			case 'pending':
+				return ' AND '.$hasEttn.' AND NOT '.$isOk.' AND NOT '.$isFail;
+			case 'error':
+				return " AND (d.ettn IS NULL OR d.ettn = '')";
+			default:
+				return '';
+		}
 	}
 }

@@ -41,7 +41,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/expedition/class/expedition.class.php';
-require_once DOL_DOCUMENT_ROOT.'/core/lib/expedition.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/sendings.lib.php';
 dol_include_once('/isnetefatura/class/isnetdespatch.class.php');
 
 $langs->loadLangs(array('sendings', 'companies', 'isnetefatura@isnetefatura'));

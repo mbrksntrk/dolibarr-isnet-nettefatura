@@ -1,3 +1,8 @@
+0.5.0 (2026-09-18)
+- Fatura menüsünde "e-Faturalar" bölümü: Gönderilen e-Faturalar, Gelen e-Faturalar, Gönderilen e-İrsaliyeler, Gelen e-İrsaliyeler
+- Yeni sayfa: gönderilen belgeler listesi (outgoing.php) — arama, duruma göre filtre, sayfalama, tek tek veya toplu durum yenileme, PDF kaydetme
+- Düzeltme: e-İrsaliye sekmesi (despatch.php) boş açılıyordu — sevkiyat sekme başlığı fonksiyonu yanlış çekirdek kütüphaneden isteniyordu
+
 0.4.1 (2026-09-17)
 - Modül numarası 194091 (wiki.dolibarr.org rezerve aralığı; DoliStore kuralı). Yetki kimlikleri değişti: modülü kapatıp açın ve kullanıcı yetkilerini yeniden verin.
 - Sayfalar standart main.inc.php yükleme bloğunu kullanır (htdocs/custom altında ya da doğrudan htdocs altında çalışır); CLI betiği her iki konumu destekler.
