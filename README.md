@@ -1,5 +1,7 @@
 # Dolibarr İşNet e-Fatura / e-Arşiv / e-İrsaliye Modülü
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/mbrksntrk-dolibarr-isnet-nettefatura-1ycv0i)](https://m8ven.ai/mcp/mbrksntrk-dolibarr-isnet-nettefatura-1ycv0i)
+
 Dolibarr ERP/CRM için **İşNet (Nette Fatura)** özel entegratörü üzerinden Türkiye GİB e-belge entegrasyonu.
 Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 
