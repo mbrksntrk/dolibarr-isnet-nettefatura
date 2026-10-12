@@ -27,7 +27,11 @@ CREATE TABLE llx_isnetefatura_incoming (
   total_vat          double(24,8) DEFAULT NULL,
   total_payable      double(24,8) DEFAULT NULL,
   order_number       varchar(64) DEFAULT NULL,
+  billing_reference  varchar(32) DEFAULT NULL,        -- source invoice number (return / correction invoices)
+  company_vendor_number varchar(32) DEFAULT NULL,     -- integrator unit (CompanyVendorNumber) holding the document
+  envelope_id        varchar(64) DEFAULT NULL,
   status             varchar(64) DEFAULT NULL,        -- integrator InvoiceStatus
+  detail_status      varchar(64) DEFAULT NULL,        -- integrator InvoiceDetailStatus
   response_status    varchar(64) DEFAULT NULL,        -- ApplicationResponseStatus / our reply
   lines_json         mediumtext DEFAULT NULL,         -- InvoiceDetails as received
   fk_soc             integer DEFAULT NULL,

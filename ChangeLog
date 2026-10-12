@@ -1,3 +1,10 @@
+0.6.0 (2026-10-12)
+- Gelen e-Faturalar ekranı yenilendi: fatura birim sorgula (yerel + İşNet) ve DirectInvoice ile birime yönlendirme (birden fazla birim varsa; tek birimde belgeler o birime ait sayılır), katlanır filtre paneli ve aktif filtre rozetleri, varsayılan son 30 gün, onay durumu (yanıt bekliyor / süresi doluyor / kabul / otomatik / red / iade) ve kalan yanıt günü, sıralama/sayfalama, para birimi bazında toplamlar, detay paneli (satırlar), İşNet görüntüleyici bağlantısı, toplu aktar / tedarikçi eşle / kabul (onaylı), CSV dışa aktarım
+- Gelen tabloya kaynak fatura no (ReturnInvoiceNumber), birim (CompanyVendorNumber), zarf no ve detay durum sütunları + indeksler (update_0.6.0.sql; modülü kapatıp açın)
+- Bağlantı sağlığı: son başarılı senkron / son hata ekranda; ISNETEFATURA_ALERT_EMAIL adresine art arda ISNETEFATURA_ALERT_AFTER (3) hatada uyarı ve düzelince bilgi e-postası
+- İşNet'e ulaşılamadığında (IP beyaz listesi, zaman aşımı) ham SOAP hatası yerine sunucunun çıkış IP'sini içeren açıklama; bağlantı testinde çıkış IP'si
+- MCP isnet_list_incoming: onay durumu, tarih, tutar, senaryo, tip, VKN, kaynak fatura filtreleri; toplam sayı, para birimi toplamları ve senkron uyarısı
+
 0.5.1 (2026-09-18)
 - Durum yorumlaması: "Dokuman_Bulunan_Adrese_Gonderilemedi" ve "Hedeften_Sistem_Yaniti_Basarisiz_Geldi" artık başarısızlık sayılır (önceden "Oluşturuldu" görünüyordu)
 - TEMELFATURA'da "Zarf_Basariyla_Islendi" nihai başarı sayılır; uygulama yanıtı beklenen senaryolarda (TİCARİFATURA, KAMU, İHRACAT) beklemeye devam eder

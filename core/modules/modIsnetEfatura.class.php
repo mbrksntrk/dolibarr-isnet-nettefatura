@@ -21,7 +21,7 @@ class modIsnetEfatura extends DolibarrModules
 		$this->descriptionlong = 'Dolibarr müşteri faturalarını İşNet SOAP web servisi üzerinden e-Fatura veya e-Arşiv olarak GİB\'e iletir.';
 		$this->editor_name = 'M. Burak Şentürk';
 		$this->editor_url = 'https://buraksenturk.net';
-		$this->version = '0.5.1';
+		$this->version = '0.6.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'bill';
 
@@ -72,6 +72,9 @@ class modIsnetEfatura extends DolibarrModules
 			array('ISNETEFATURA_INCOMING_ENABLED', 'chaine', '1', 'Gelen e-Faturaları senkronize et', 0, 'current', 0),
 			array('ISNETEFATURA_INCOMING_DAYS', 'chaine', '30', 'Gelen fatura geriye dönük gün', 0, 'current', 0),
 			array('ISNETEFATURA_INCOMING_AUTOCREATE_SUPPLIER', 'chaine', '1', 'Tanınmayan gönderici için tedarikçi carisi oluştur', 0, 'current', 0),
+			array('ISNETEFATURA_ALERT_EMAIL', 'chaine', '', 'Senkron art arda başarısız olunca uyarı e-postası', 0, 'current', 0),
+			array('ISNETEFATURA_ALERT_AFTER', 'chaine', '3', 'Uyarı için art arda hata sayısı', 0, 'current', 0),
+			array('ISNETEFATURA_EGRESS_IP_URL', 'chaine', 'https://api.ipify.org', 'Bağlantı hatasında çıkış IP sorgusu (boş = kapalı)', 0, 'current', 0),
 			// Export
 			array('ISNETEFATURA_EXPORT_RECEIVER_NAME', 'chaine', 'Ticaret Bakanlığı- Bilgi Teknolojileri Genel Müdürlüğü', 'İhracat senaryosunda alıcı (GTB)', 0, 'current', 0),
 			array('ISNETEFATURA_EXPORT_RECEIVER_VKN', 'chaine', '1460415308', 'GTB VKN', 0, 'current', 0),

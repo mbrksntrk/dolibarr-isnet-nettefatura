@@ -76,7 +76,16 @@ class ToolIsnetEfatura extends McpTool
 					"properties" => [
 						"kind" => ["type" => "string", "enum" => ["INVOICE", "DESPATCH"], "description" => "Default INVOICE."],
 						"unlinked" => ["type" => "boolean", "description" => "Only documents not yet imported as supplier invoice."],
-						"search" => ["type" => "string", "description" => "Filter by sender name, VKN or document number."],
+						"search" => ["type" => "string", "description" => "Filter by sender name, VKN, document number or ETTN."],
+						"sender_tax_code" => ["type" => "string", "description" => "Sender VKN/TCKN (partial match)."],
+						"approval" => ["type" => "string", "enum" => ["pending", "expiring", "accepted", "auto", "rejected", "returned"], "description" => "Approval state; 'expiring' = commercial invoices whose 8-day reply window ends within 3 days."],
+						"scenario" => ["type" => "string", "description" => "e.g. TEMELFATURA, TICARIFATURA."],
+						"invoice_type" => ["type" => "string", "description" => "e.g. SATIS, IADE, TEVKIFAT, ISTISNA."],
+						"source_invoice" => ["type" => "string", "description" => "Source invoice number referenced by return invoices."],
+						"date_from" => ["type" => "string", "description" => "Invoice date from (YYYY-MM-DD)."],
+						"date_to" => ["type" => "string", "description" => "Invoice date to (YYYY-MM-DD)."],
+						"amount_min" => ["type" => "number", "description" => "Minimum payable amount."],
+						"amount_max" => ["type" => "number", "description" => "Maximum payable amount."],
 						"limit" => ["type" => "integer", "description" => "Default 50."],
 					],
 				],
@@ -363,7 +372,26 @@ class ToolIsnetEfatura extends McpTool
 			return ["error" => "Permission denied: supplier invoice read"];
 		}
 		$limit = max(1, min(200, (int) ($args['limit'] ?? 50)));
-		$list = (new IsnetIncoming($this->db))->fetchAll(['kind' => ($args['kind'] ?? 'INVOICE') === 'DESPATCH' ? 'DESPATCH' : 'INVOICE', 'unlinked' => !empty($args['unlinked']), 'search' => (string) ($args['search'] ?? '')], $limit);
+		$filters = [
+			'kind' => ($args['kind'] ?? 'INVOICE') === 'DESPATCH' ? 'DESPATCH' : 'INVOICE',
+			'unlinked' => !empty($args['unlinked']) ? 1 : 0,
+			'search' => (string) ($args['search'] ?? ''),
+			'taxcode' => (string) ($args['sender_tax_code'] ?? ''),
+			'approval' => (string) ($args['approval'] ?? ''),
+			'scenario' => (string) ($args['scenario'] ?? ''),
+			'type' => (string) ($args['invoice_type'] ?? ''),
+			'ref' => (string) ($args['source_invoice'] ?? ''),
+			'amount_min' => isset($args['amount_min']) ? (string) $args['amount_min'] : '',
+			'amount_max' => isset($args['amount_max']) ? (string) $args['amount_max'] : '',
+		];
+		foreach (['date_from' => 'date_start', 'date_to' => 'date_end'] as $arg => $key) {
+			if (!empty($args[$arg]) && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string) $args[$arg], $m)) {
+				$filters[$key] = $key === 'date_end' ? dol_mktime(23, 59, 59, (int) $m[2], (int) $m[3], (int) $m[1]) : dol_mktime(0, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1]);
+			}
+		}
+		$total = 0;
+		$inc = new IsnetIncoming($this->db);
+		$list = $inc->fetchList($filters, $total, $limit);
 		$rows = [];
 		foreach ($list as $x) {
 			$rows[] = [
@@ -373,9 +401,16 @@ class ToolIsnetEfatura extends McpTool
 				"currency" => $x->currency_code, "total_ht" => (float) $x->total_line_ext, "total_vat" => (float) $x->total_vat, "total_payable" => (float) $x->total_payable,
 				"isnet_status" => $x->status, "our_reply" => $x->response_status ?: null, "thirdparty_id" => (int) $x->fk_soc ?: null,
 				"supplier_invoice_id" => (int) $x->fk_facture_fourn ?: null, "imported" => (int) $x->fk_facture_fourn > 0,
+				"approval" => $x->approvalState() ?: null, "reply_days_left" => $x->replyDaysLeft(),
+				"source_invoice" => $x->billing_reference ?: null, "unit" => $x->company_vendor_number ?: null,
 			];
 		}
-		return ["count" => count($rows), "incoming" => $rows, "link" => dol_buildpath('/isnetefatura/incoming.php', 2)];
+		$out = ["count" => count($rows), "total_matching" => $total, "totals_by_currency" => $inc->totalsByCurrency($filters), "incoming" => $rows, "link" => dol_buildpath('/isnetefatura/incoming.php', 2)];
+		$lastOk = getDolGlobalInt('ISNETEFATURA_SYNC_LAST_OK');
+		if (getDolGlobalInt('ISNETEFATURA_SYNC_LAST_ERROR_DATE') > $lastOk) {
+			$out["warning"] = "İşNet sync is failing; data is as of ".($lastOk ? dol_print_date($lastOk, 'dayhourrfc') : 'unknown').". Last error: ".getDolGlobalString('ISNETEFATURA_SYNC_LAST_ERROR');
+		}
+		return $out;
 	}
 
 	private function syncIncoming(array $args)

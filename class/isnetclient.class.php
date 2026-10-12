@@ -107,11 +107,61 @@ class IsnetClient
 		try {
 			$this->clients[$service] = new SoapClient($url.'?wsdl', $options);
 		} catch (SoapFault $e) {
-			$this->error = 'SOAP_INIT_FAILED: '.$e->getMessage();
+			$this->error = $this->describeTransportError('SOAP_INIT_FAILED', $e->getMessage(), $url);
 			dol_syslog(__METHOD__.' '.$this->error, LOG_ERR);
 			return null;
 		}
 		return $this->clients[$service];
+	}
+
+	/**
+	 * İşNet filters callers by source IP at network level: an unknown IP gets no TCP answer at
+	 * all, which PHP reports as an unreadable WSDL or a connect timeout. Tell the user which IP
+	 * this server goes out with, so it can be compared with the one registered at İşNet.
+	 *
+	 * @param  string $code    Error prefix
+	 * @param  string $message Raw transport message
+	 * @param  string $url     Endpoint
+	 * @return string
+	 */
+	private function describeTransportError($code, $message, $url)
+	{
+		global $langs;
+		if (!preg_match('/failed to load external entity|could not connect|timed out|connection refused|couldn.t connect/i', $message)) {
+			return $code.': '.trim($message);
+		}
+		if (is_object($langs)) {
+			$langs->load('isnetefatura@isnetefatura');
+		}
+		$host = (string) parse_url($url, PHP_URL_HOST);
+		$ip = self::egressIp();
+		$text = is_object($langs) ? $langs->transnoentities('IsnetErrUnreachable', $host, $ip !== '' ? $ip : '?') : 'Cannot reach '.$host.' (egress IP '.$ip.')';
+		return 'ISNET_UNREACHABLE: '.$text.' ['.$code.': '.trim($message).']';
+	}
+
+	/**
+	 * Public IP this server uses for outgoing connections (what İşNet sees), '' if unknown.
+	 * The lookup service is configurable and can be switched off by emptying the setting.
+	 */
+	public static function egressIp()
+	{
+		static $ip = null;
+		if ($ip !== null) {
+			return $ip;
+		}
+		$ip = '';
+		$service = trim(getDolGlobalString('ISNETEFATURA_EGRESS_IP_URL', 'https://api.ipify.org'));
+		if ($service === '' || !function_exists('curl_init')) {
+			return $ip;
+		}
+		$ch = curl_init($service);
+		curl_setopt_array($ch, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 5));
+		$r = trim((string) curl_exec($ch));
+		curl_close($ch);
+		if (filter_var($r, FILTER_VALIDATE_IP)) {
+			$ip = $r;
+		}
+		return $ip;
 	}
 
 	/**
@@ -137,7 +187,7 @@ class IsnetClient
 		try {
 			$response = $client->__soapCall($operation, array($params));
 		} catch (SoapFault $e) {
-			$this->error = 'SOAP_FAULT: '.$e->getMessage();
+			$this->error = $this->describeTransportError('SOAP_FAULT', $e->getMessage(), $this->getServiceUrl($service));
 			dol_syslog(__METHOD__.' '.$operation.' '.$this->error, LOG_ERR);
 			$this->captureTrace($client);
 			return null;
@@ -449,6 +499,28 @@ class IsnetClient
 			$out[(string) $v->companyVendorNumber] = (string) $v->companyVendorName;
 		}
 		return $out;
+	}
+
+	/**
+	 * Move documents to another unit (CompanyVendorNumber) of the company at the integrator.
+	 *
+	 * @param  array  $ettns      ETTN list
+	 * @param  string $fromVendor Current unit ('' = main account)
+	 * @param  string $toVendor   Target unit
+	 * @return bool
+	 */
+	public function directInvoice(array $ettns, $fromVendor, $toVendor)
+	{
+		$request = array(
+			'CompanyTaxCode' => $this->getCompanyTaxCode(),
+			'InvoiceEttnList' => array('string' => array_values($ettns)),
+			'NewCompanyVendorNumber' => (string) $toVendor,
+		);
+		if ((string) $fromVendor !== '') {
+			$request['CompanyVendorNumber'] = (string) $fromVendor;
+		}
+		$r = $this->call(self::SERVICE_INVOICE, 'DirectInvoice', $request);
+		return $r !== null && $this->error === '';
 	}
 
 	/**

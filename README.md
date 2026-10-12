@@ -10,7 +10,7 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 | Dolibarr | 20.0+ (24.0 üzerinde geliştirildi ve test edildi) |
 | PHP | 8.1+, `soap`, `curl`, `mbstring` eklentileri |
 | Lisans | GPL-3.0-or-later + yazar atfı şartı ([ATTRIBUTION.md](ATTRIBUTION.md)) |
-| Sürüm | 0.5.1 |
+| Sürüm | 0.6.0 |
 
 ## Neler yapıyor
 
@@ -27,6 +27,8 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 
 **Menü**
 - Fatura menüsünde **e-Faturalar** bölümü: Gönderilen e-Faturalar, Gelen e-Faturalar, Gönderilen e-İrsaliyeler, Gelen e-İrsaliyeler
+- **Gelen e-Faturalar ekranı (0.6.0):** fatura birim sorgulama ve birime yönlendirme, katlanır filtre paneli (onay durumu, yanıt süresi dolanlar, fatura/geliş tarihi aralığı, tutar aralığı, senaryo, tip, gönderici adı/VKN, kaynak fatura no, aktarım durumu, birim, para birimi), aktif filtre rozetleri, sıralama/sayfalama, para birimi toplamları, detay paneli, İşNet görüntüleyici, toplu aktar/cari eşle/kabul, CSV dışa aktarım
+- **Bağlantı sağlığı:** senkron hatası ekranda uyarı olarak görünür; art arda N hatada (ve düzelince) e-posta; bağlantı hatalarında sunucunun çıkış IP'si gösterilir
 - Gönderilen belgeler listesi: arama, duruma göre filtre, sayfalama, tek tek ya da toplu durum yenileme, imzalı PDF kaydı
 
 **Altyapı**
@@ -76,7 +78,7 @@ Modül, AI modülünün MCP sunucusuna araçlar ekler (Kurulum → AI → araç 
 | `isnet_refresh_status` | İşNet'ten durumu yenile, PDF indir |
 | `isnet_list_documents` | Sonuca göre belge listesi: başarısız / bekleyen / tamamlanan / iptal |
 | `isnet_check_taxpayer` | VKN/TCKN e-Fatura & e-İrsaliye mükellefi mi, posta kutuları |
-| `isnet_list_incoming` | Gelen e-Fatura / e-İrsaliye listesi (aktarılmamışlar filtresi) |
+| `isnet_list_incoming` | Gelen e-Fatura / e-İrsaliye listesi (onay durumu, tarih, tutar, senaryo, tip, VKN, kaynak fatura filtreleri; para birimi toplamları) |
 | `isnet_sync_incoming` | Gelen belgeleri şimdi senkronize et |
 | `isnet_import_incoming` | Gelen e-Faturadan taslak tedarikçi faturası oluştur |
 | `isnet_reply_incoming` | Ticari e-Faturaya KABUL / RED yanıtı |

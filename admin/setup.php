@@ -41,6 +41,7 @@ if (!$res) {
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 dol_include_once('/isnetefatura/class/isnetclient.class.php');
 dol_include_once('/isnetefatura/class/isnetaudit.class.php');
+dol_include_once('/isnetefatura/class/isnetincoming.class.php');
 
 $langs->loadLangs(array('admin', 'isnetefatura@isnetefatura'));
 
@@ -100,6 +101,9 @@ $sections = array(
 		'ISNETEFATURA_INCOMING_ENABLED' => array('type' => 'yesno'),
 		'ISNETEFATURA_INCOMING_DAYS' => array('type' => 'int', 'size' => 4, 'min' => 1),
 		'ISNETEFATURA_INCOMING_AUTOCREATE_SUPPLIER' => array('type' => 'yesno'),
+		'ISNETEFATURA_ALERT_EMAIL' => array('type' => 'text', 'size' => 40),
+		'ISNETEFATURA_ALERT_AFTER' => array('type' => 'int', 'size' => 4, 'min' => 1),
+		'ISNETEFATURA_EGRESS_IP_URL' => array('type' => 'url'),
 	),
 	'IsnetSectionDespatch' => array(
 		'ISNETEFATURA_DESPATCH_ENABLED' => array('type' => 'yesno'),
@@ -215,7 +219,8 @@ if ($action === 'testconnection') {
 	$testResult['health'] = $client->healthCheck();
 	$testResult['health_error'] = $client->error;
 	$testResult['balance'] = $client->getCompanyBalance();
-	$testResult['vendors'] = $client->getCompanyVendors();
+	$testResult['vendors'] = IsnetIncoming::vendors($db, $testResult['health']);
+	$testResult['egress_ip'] = IsnetClient::egressIp();
 
 	if ($testVkn !== '') {
 		$testResult['lookup_vkn'] = $testVkn;
@@ -314,6 +319,9 @@ if ($testResult !== null) {
 		print img_picto('', 'error').' '.dol_escape_htmltag($testResult['health_error']);
 	}
 	print '</td></tr>';
+	if ($testResult['egress_ip'] !== '') {
+		print '<tr class="oddeven"><td>'.$langs->trans('IsnetEgressIp').'</td><td>'.dol_escape_htmltag($testResult['egress_ip']).'</td></tr>';
+	}
 	if ($testResult['balance'] !== null) {
 		$warn = getDolGlobalInt('ISNETEFATURA_BALANCE_WARN', 0);
 		print '<tr class="oddeven"><td>'.$langs->trans('IsnetBalance').'</td><td>'.($warn > 0 && $testResult['balance'] < $warn ? img_picto('', 'warning').' ' : '').number_format($testResult['balance'], 0, ',', '.').'</td></tr>';

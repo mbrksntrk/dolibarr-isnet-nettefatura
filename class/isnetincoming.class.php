@@ -43,7 +43,11 @@ class IsnetIncoming
 	public $total_vat = 0.0;
 	public $total_payable = 0.0;
 	public $order_number = '';
+	public $billing_reference = '';
+	public $company_vendor_number = '';
+	public $envelope_id = '';
 	public $status = '';
+	public $detail_status = '';
 	public $response_status = '';
 	public $lines_json = '';
 	public $fk_soc = 0;
@@ -94,16 +98,41 @@ class IsnetIncoming
 	 */
 	public function fetchAll($filters = array(), $limit = 200)
 	{
-		$sql = 'SELECT * FROM '.MAIN_DB_PREFIX.self::TABLE.' WHERE entity IN ('.getEntity('supplier_invoice').')';
-		$sql .= " AND doc_kind = '".$this->db->escape(!empty($filters['kind']) ? $filters['kind'] : 'INVOICE')."'";
-		if (!empty($filters['unlinked'])) {
-			$sql .= ' AND (fk_facture_fourn IS NULL OR fk_facture_fourn = 0)';
+		$total = 0;
+		return $this->fetchList($filters, $total, $limit);
+	}
+
+	/** Columns the list may be sorted on */
+	const SORTABLE = array('invoice_date', 'date_received', 'invoice_number', 'sender_name', 'scenario', 'invoice_type', 'total_line_ext', 'total_vat', 'total_payable', 'status', 'company_vendor_number');
+
+	/** Days a commercial invoice can be answered after it is received (GİB) */
+	const REPLY_DAYS = 8;
+
+	/**
+	 * Filtered, sorted, paged list.
+	 *
+	 * Filter keys: kind, search, unlinked (1 = not imported, 2 = imported), number, sender, taxcode,
+	 * scenario, type, status, detail_status, approval (see approvalSql), vendor, currency, ref (source invoice),
+	 * date_start/date_end (invoice date), received_start/received_end, amount_min/amount_max (payable).
+	 *
+	 * @param  array $filters
+	 * @param  int   $total   Out: number of matching rows
+	 * @return IsnetIncoming[]
+	 */
+	public function fetchList($filters, &$total, $limit = 50, $offset = 0, $sortfield = 'invoice_date', $sortorder = 'DESC')
+	{
+		$where = $this->buildWhere($filters);
+		$total = 0;
+		$res = $this->db->query('SELECT COUNT(*) AS n FROM '.MAIN_DB_PREFIX.self::TABLE.' WHERE '.$where);
+		if ($res && ($o = $this->db->fetch_object($res))) {
+			$total = (int) $o->n;
 		}
-		if (!empty($filters['search'])) {
-			$s = $this->db->escape($filters['search']);
-			$sql .= " AND (invoice_number LIKE '%".$s."%' OR sender_name LIKE '%".$s."%' OR sender_tax_code LIKE '%".$s."%')";
+		$sortfield = in_array($sortfield, self::SORTABLE, true) ? $sortfield : 'invoice_date';
+		$sortorder = strtoupper($sortorder) === 'ASC' ? 'ASC' : 'DESC';
+		$sql = 'SELECT * FROM '.MAIN_DB_PREFIX.self::TABLE.' WHERE '.$where.' ORDER BY '.$sortfield.' '.$sortorder.', rowid '.$sortorder;
+		if ($limit > 0) {
+			$sql .= ' LIMIT '.((int) $limit).' OFFSET '.max(0, (int) $offset);
 		}
-		$sql .= ' ORDER BY invoice_date DESC, rowid DESC LIMIT '.((int) $limit);
 		$out = array();
 		$res = $this->db->query($sql);
 		while ($res && ($o = $this->db->fetch_object($res))) {
@@ -112,6 +141,261 @@ class IsnetIncoming
 			$out[] = $x;
 		}
 		return $out;
+	}
+
+	/**
+	 * Sums of the filtered rows per currency.
+	 *
+	 * @return array currency => array(n, ht, vat, ttc)
+	 */
+	public function totalsByCurrency($filters)
+	{
+		$sql = 'SELECT currency_code, COUNT(*) AS n, SUM(total_line_ext) AS ht, SUM(total_vat) AS vat, SUM(total_payable) AS ttc FROM '.MAIN_DB_PREFIX.self::TABLE;
+		$sql .= ' WHERE '.$this->buildWhere($filters).' GROUP BY currency_code ORDER BY n DESC';
+		$out = array();
+		$res = $this->db->query($sql);
+		while ($res && ($o = $this->db->fetch_object($res))) {
+			$out[(string) $o->currency_code] = array('n' => (int) $o->n, 'ht' => (float) $o->ht, 'vat' => (float) $o->vat, 'ttc' => (float) $o->ttc);
+		}
+		return $out;
+	}
+
+	/**
+	 * Distinct non-empty values of a column, for filter drop-downs.
+	 */
+	public function distinctValues($column, $kind = 'INVOICE')
+	{
+		if (!in_array($column, array('scenario', 'invoice_type', 'status', 'detail_status', 'currency_code', 'company_vendor_number', 'sender_name'), true)) {
+			return array();
+		}
+		$sql = 'SELECT DISTINCT '.$column.' AS v FROM '.MAIN_DB_PREFIX.self::TABLE.' WHERE entity IN ('.getEntity('supplier_invoice').')';
+		$sql .= " AND doc_kind = '".$this->db->escape($kind)."' AND ".$column." IS NOT NULL AND ".$column." <> '' ORDER BY ".$column;
+		$out = array();
+		$res = $this->db->query($sql);
+		while ($res && ($o = $this->db->fetch_object($res))) {
+			$out[] = (string) $o->v;
+		}
+		return $out;
+	}
+
+	/**
+	 * SQL condition for an approval state: pending | expiring | accepted | auto | rejected | returned.
+	 * The integrator status carries the state; our own reply (response_status) overrides it.
+	 */
+	private function approvalSql($state)
+	{
+		$noReply = "(response_status IS NULL OR response_status = '')";
+		switch ($state) {
+			case 'pending':
+				return "(status = 'Onay_Bekliyor' AND ".$noReply.')';
+			case 'expiring':
+				$from = $this->db->idate(dol_now() - self::REPLY_DAYS * 86400);
+				$to = $this->db->idate(dol_now() - (self::REPLY_DAYS - 3) * 86400);
+				return "(status = 'Onay_Bekliyor' AND ".$noReply." AND scenario = 'TICARIFATURA' AND COALESCE(date_received, invoice_date) BETWEEN '".$from."' AND '".$to."')";
+			case 'accepted':
+				return "(response_status = 'KABUL' OR (".$noReply." AND status IN ('Onaylandi', 'Alici_Kabul_Etti')))";
+			case 'auto':
+				return "(".$noReply." AND status LIKE 'Otomatik%')";
+			case 'rejected':
+				return "(response_status = 'RED' OR (".$noReply." AND status IN ('Reddedildi', 'Alici_Reddetti')))";
+			case 'returned':
+				return "(response_status = 'IADE_EDILDI' OR (".$noReply." AND status IN ('Iade_Edildi', 'Alici_Iade_Etti')))";
+		}
+		return '';
+	}
+
+	/**
+	 * Approval state of this row (same buckets as the filter, without "expiring").
+	 */
+	public function approvalState()
+	{
+		$map = array('KABUL' => 'accepted', 'RED' => 'rejected', 'IADE_EDILDI' => 'returned');
+		if (isset($map[$this->response_status])) {
+			return $map[$this->response_status];
+		}
+		if ($this->status === 'Onay_Bekliyor') {
+			return 'pending';
+		}
+		if (strpos($this->status, 'Otomatik') === 0) {
+			return 'auto';
+		}
+		if (in_array($this->status, array('Onaylandi', 'Alici_Kabul_Etti'), true)) {
+			return 'accepted';
+		}
+		if (in_array($this->status, array('Reddedildi', 'Alici_Reddetti'), true)) {
+			return 'rejected';
+		}
+		if (in_array($this->status, array('Iade_Edildi', 'Alici_Iade_Etti'), true)) {
+			return 'returned';
+		}
+		return '';
+	}
+
+	/**
+	 * Whether this document still accepts our KABUL / RED answer.
+	 */
+	public function canReply()
+	{
+		return $this->doc_kind === 'INVOICE' && $this->response_status === '' && in_array($this->status, array('', 'Onay_Bekliyor'), true);
+	}
+
+	/**
+	 * Days left to answer a commercial invoice, null when not applicable.
+	 */
+	public function replyDaysLeft()
+	{
+		if ($this->scenario !== 'TICARIFATURA' || !$this->canReply()) {
+			return null;
+		}
+		$from = $this->date_received ?: $this->invoice_date;
+		if (!$from) {
+			return null;
+		}
+		return (int) floor(($from + self::REPLY_DAYS * 86400 - dol_now()) / 86400);
+	}
+
+	private function buildWhere($f)
+	{
+		$db = $this->db;
+		$w = array('entity IN ('.getEntity('supplier_invoice').')');
+		$w[] = "doc_kind = '".$db->escape(!empty($f['kind']) ? $f['kind'] : 'INVOICE')."'";
+		if (!empty($f['unlinked'])) {
+			$w[] = (int) $f['unlinked'] === 2 ? 'fk_facture_fourn > 0' : '(fk_facture_fourn IS NULL OR fk_facture_fourn = 0)';
+		}
+		if (!empty($f['search'])) {
+			$s = $db->escape($db->escapeforlike($f['search']));
+			$w[] = "(invoice_number LIKE '%".$s."%' OR sender_name LIKE '%".$s."%' OR sender_tax_code LIKE '%".$s."%' OR ettn LIKE '%".$s."%')";
+		}
+		$like = array('number' => 'invoice_number', 'sender' => 'sender_name', 'taxcode' => 'sender_tax_code', 'ref' => 'billing_reference');
+		foreach ($like as $k => $col) {
+			if (isset($f[$k]) && trim((string) $f[$k]) !== '') {
+				$w[] = $col." LIKE '%".$db->escape($db->escapeforlike(trim((string) $f[$k])))."%'";
+			}
+		}
+		$eq = array('scenario' => 'scenario', 'type' => 'invoice_type', 'status' => 'status', 'detail_status' => 'detail_status', 'currency' => 'currency_code', 'vendor' => 'company_vendor_number');
+		foreach ($eq as $k => $col) {
+			if (isset($f[$k]) && (string) $f[$k] !== '') {
+				$w[] = $col." = '".$db->escape((string) $f[$k])."'";
+			}
+		}
+		if (!empty($f['approval']) && ($a = $this->approvalSql($f['approval'])) !== '') {
+			$w[] = $a;
+		}
+		$dates = array('date_start' => array('invoice_date', '>='), 'date_end' => array('invoice_date', '<='), 'received_start' => array('date_received', '>='), 'received_end' => array('date_received', '<='));
+		foreach ($dates as $k => $d) {
+			if (!empty($f[$k])) {
+				$w[] = $d[0].' '.$d[1]." '".$db->idate((int) $f[$k])."'";
+			}
+		}
+		if (isset($f['amount_min']) && $f['amount_min'] !== '' && $f['amount_min'] !== null) {
+			$w[] = 'total_payable >= '.((float) price2num($f['amount_min']));
+		}
+		if (isset($f['amount_max']) && $f['amount_max'] !== '' && $f['amount_max'] !== null) {
+			$w[] = 'total_payable <= '.((float) price2num($f['amount_max']));
+		}
+		return implode(' AND ', $w);
+	}
+
+	/* ------------------------------------------------------------------ units (CompanyVendorNumber) */
+
+	/**
+	 * Units of the company at the integrator, from the cache refreshed by the sync job.
+	 * The page never calls the integrator for this: a dead connection must not stall the list.
+	 *
+	 * @param  bool $refresh Ask the integrator now and update the cache
+	 * @return array number => name
+	 */
+	public static function vendors($db, $refresh = false)
+	{
+		global $conf;
+		if ($refresh) {
+			$client = new IsnetClient($db);
+			$list = $client->getCompanyVendors();
+			if ($client->error === '') {
+				require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+				dolibarr_set_const($db, 'ISNETEFATURA_VENDORS_CACHE', json_encode($list, JSON_UNESCAPED_UNICODE), 'chaine', 0, '', $conf->entity);
+				return $list;
+			}
+		}
+		$list = json_decode(getDolGlobalString('ISNETEFATURA_VENDORS_CACHE', '[]'), true);
+		return is_array($list) ? $list : array();
+	}
+
+	/**
+	 * Unit holding this document. When the company has a single unit, documents without one
+	 * belong to it.
+	 */
+	public function vendorNumber(array $vendors)
+	{
+		if ($this->company_vendor_number !== '') {
+			return $this->company_vendor_number;
+		}
+		return count($vendors) === 1 ? (string) key($vendors) : '';
+	}
+
+	/**
+	 * Find an incoming invoice by sender VKN/TCKN and number: locally first, then at the integrator
+	 * (the hit is stored, so it shows up in the list).
+	 *
+	 * @return int >0 found (this is loaded), 0 not found, <0 error
+	 */
+	public function locate($taxCode, $number)
+	{
+		global $conf;
+		$taxCode = preg_replace('/\D+/', '', (string) $taxCode);
+		$number = strtoupper(trim((string) $number));
+		if ($number === '') {
+			return 0;
+		}
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.self::TABLE.' WHERE entity IN ('.getEntity('supplier_invoice').") AND doc_kind = 'INVOICE'";
+		$sql .= " AND invoice_number = '".$this->db->escape($number)."'".($taxCode !== '' ? " AND sender_tax_code = '".$this->db->escape($taxCode)."'" : '');
+		$res = $this->db->query($sql.' LIMIT 1');
+		if ($res && ($o = $this->db->fetch_object($res))) {
+			return $this->fetch((int) $o->rowid);
+		}
+		$client = new IsnetClient($this->db);
+		$list = $client->searchInvoice(array(
+			'MinInvoiceNumber' => $number,
+			'MaxInvoiceNumber' => $number,
+			'ResultSet' => IsnetClient::resultSet(array('IsInvoiceDetailIncluded')),
+		), 'Incoming');
+		if ($client->error !== '') {
+			$this->error = $client->error;
+			return -1;
+		}
+		foreach ($list as $inv) {
+			$vkn = preg_replace('/\D+/', '', (string) ($inv->Receiver->ReceiverTaxCode ?? ''));
+			if ($taxCode !== '' && $vkn !== $taxCode) {
+				continue;
+			}
+			if ($this->upsert($inv) < 0) {
+				return -1;
+			}
+			$res = $this->db->query('SELECT rowid FROM '.MAIN_DB_PREFIX.self::TABLE." WHERE ettn = '".$this->db->escape((string) $inv->ETTN)."' AND entity = ".((int) $conf->entity));
+			if ($res && ($o = $this->db->fetch_object($res))) {
+				return $this->fetch((int) $o->rowid);
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Move this document to another unit at the integrator.
+	 *
+	 * @return int >0 ok, <0 error
+	 */
+	public function moveToVendor($toVendor, User $user)
+	{
+		$client = new IsnetClient($this->db);
+		$from = $this->company_vendor_number;
+		if (!$client->directInvoice(array($this->ettn), $from, $toVendor)) {
+			$this->error = $client->error;
+			return -1;
+		}
+		$this->company_vendor_number = (string) $toVendor;
+		$this->db->query('UPDATE '.MAIN_DB_PREFIX.self::TABLE." SET company_vendor_number = '".$this->db->escape($this->company_vendor_number)."' WHERE rowid = ".((int) $this->id));
+		IsnetAudit::logSecurity($this->db, 'ISNET_DIRECT', 'Incoming e-Fatura '.$this->invoice_number.' ('.$this->ettn.') moved from unit "'.$from.'" to "'.$toVendor.'" by '.$user->login, $user);
+		return 1;
 	}
 
 	public function lines()
@@ -209,7 +493,11 @@ class IsnetIncoming
 			'total_vat' => (float) ($inv->TotalVATAmount ?? 0),
 			'total_payable' => (float) ($inv->TotalPayableAmount ?? 0),
 			'order_number' => (string) ($inv->OrderNumber ?? ''),
+			'billing_reference' => (string) ($inv->ReturnInvoiceNumber ?? ''),
+			'company_vendor_number' => (string) ($inv->CompanyVendorNumber ?? ''),
+			'envelope_id' => (string) ($inv->EnvelopeId ?? ''),
 			'status' => (string) ($inv->Status ?? ''),
+			'detail_status' => (string) ($inv->DetailStatus ?? ''),
 			'response_status' => (string) ($inv->ApplicationResponseStatus ?? ''),
 			'lines_json' => json_encode($lines, JSON_UNESCAPED_UNICODE),
 			'date_received' => self::dateOrNull($inv->InvoiceCreationDate ?? ''),
@@ -411,8 +699,80 @@ class IsnetIncoming
 				$r = -1;
 			}
 		}
+		if ($r >= 0) {
+			self::vendors($this->db, true);
+		}
+		self::recordHealth($this->db, $r >= 0, $r < 0 ? $this->error : '');
 		$this->output = $out;
 		return $r < 0 ? -1 : 0;
+	}
+
+	/* ------------------------------------------------------------------ connection health */
+
+	/**
+	 * Remember the outcome of a sync and e-mail the configured address when the integrator has
+	 * been unreachable for ISNETEFATURA_ALERT_AFTER consecutive runs, and once more when it recovers.
+	 *
+	 * @param bool   $ok
+	 * @param string $error
+	 */
+	public static function recordHealth($db, $ok, $error = '')
+	{
+		global $conf;
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+		$entity = $conf->entity;
+		$fails = getDolGlobalInt('ISNETEFATURA_SYNC_FAILS');
+		$alerted = getDolGlobalInt('ISNETEFATURA_SYNC_ALERTED');
+		if ($ok) {
+			dolibarr_set_const($db, 'ISNETEFATURA_SYNC_LAST_OK', (string) dol_now(), 'chaine', 0, '', $entity);
+			if ($fails > 0) {
+				dolibarr_set_const($db, 'ISNETEFATURA_SYNC_FAILS', '0', 'chaine', 0, '', $entity);
+			}
+			if ($alerted) {
+				dolibarr_set_const($db, 'ISNETEFATURA_SYNC_ALERTED', '0', 'chaine', 0, '', $entity);
+				self::sendAlert($db, true, '');
+			}
+			return;
+		}
+		$fails++;
+		dolibarr_set_const($db, 'ISNETEFATURA_SYNC_FAILS', (string) $fails, 'chaine', 0, '', $entity);
+		dolibarr_set_const($db, 'ISNETEFATURA_SYNC_LAST_ERROR', dol_trunc($error, 1000, 'right', 'UTF-8', 1), 'chaine', 0, '', $entity);
+		dolibarr_set_const($db, 'ISNETEFATURA_SYNC_LAST_ERROR_DATE', (string) dol_now(), 'chaine', 0, '', $entity);
+		if (!$alerted && $fails >= max(1, getDolGlobalInt('ISNETEFATURA_ALERT_AFTER', 3))) {
+			if (self::sendAlert($db, false, $error)) {
+				dolibarr_set_const($db, 'ISNETEFATURA_SYNC_ALERTED', '1', 'chaine', 0, '', $entity);
+			}
+		}
+	}
+
+	/**
+	 * @return bool true when a message was sent
+	 */
+	private static function sendAlert($db, $recovered, $error)
+	{
+		global $langs, $mysoc;
+		$to = trim(getDolGlobalString('ISNETEFATURA_ALERT_EMAIL'));
+		if ($to === '') {
+			return false;
+		}
+		require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
+		$langs->load('isnetefatura@isnetefatura');
+		$company = is_object($mysoc) && !empty($mysoc->name) ? $mysoc->name : getDolGlobalString('MAIN_INFO_SOCIETE_NOM');
+		$lastOk = getDolGlobalInt('ISNETEFATURA_SYNC_LAST_OK');
+		$since = $lastOk ? dol_print_date($lastOk, 'dayhour', 'tzserver') : '-';
+		if ($recovered) {
+			$subject = $langs->transnoentities('IsnetAlertRecoveredSubject', $company);
+			$body = $langs->transnoentities('IsnetAlertRecoveredBody');
+		} else {
+			$subject = $langs->transnoentities('IsnetAlertSubject', $company);
+			$body = $langs->transnoentities('IsnetAlertBody', getDolGlobalInt('ISNETEFATURA_SYNC_FAILS'), $since, $error);
+		}
+		$body .= "\n\n".dol_buildpath('/isnetefatura/incoming.php', 2);
+		$from = getDolGlobalString('MAIN_MAIL_EMAIL_FROM', 'robot@domain.com');
+		$mail = new CMailFile($subject, $to, $from, $body, array(), array(), array(), '', '', 0, 0, '', '', '', '', 'standard');
+		$ok = (bool) $mail->sendfile();
+		dol_syslog('IsnetIncoming::sendAlert '.($recovered ? 'recovered' : 'failing').' to '.$to.' '.($ok ? 'sent' : 'FAILED '.$mail->error), $ok ? LOG_NOTICE : LOG_ERR);
+		return $ok;
 	}
 
 	/* ------------------------------------------------------------------ third party */
