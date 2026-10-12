@@ -43,7 +43,7 @@ dol_include_once('/isnetefatura/class/isnetclient.class.php');
 dol_include_once('/isnetefatura/class/isnetaudit.class.php');
 dol_include_once('/isnetefatura/class/isnetincoming.class.php');
 
-$langs->loadLangs(array('admin', 'isnetefatura@isnetefatura'));
+$langs->loadLangs(array('admin', 'errors', 'isnetefatura@isnetefatura'));
 
 if (!$user->admin && !$user->hasRight('isnetefatura', 'setup')) {
 	accessforbidden();
@@ -101,7 +101,7 @@ $sections = array(
 		'ISNETEFATURA_INCOMING_ENABLED' => array('type' => 'yesno'),
 		'ISNETEFATURA_INCOMING_DAYS' => array('type' => 'int', 'size' => 4, 'min' => 1),
 		'ISNETEFATURA_INCOMING_AUTOCREATE_SUPPLIER' => array('type' => 'yesno'),
-		'ISNETEFATURA_ALERT_EMAIL' => array('type' => 'text', 'size' => 40),
+		'ISNETEFATURA_ALERT_EMAIL' => array('type' => 'text', 'size' => 40, 'placeholder' => 'muhasebe@firma.com.tr, it@firma.com.tr', 'emails' => true),
 		'ISNETEFATURA_ALERT_AFTER' => array('type' => 'int', 'size' => 4, 'min' => 1),
 		'ISNETEFATURA_EGRESS_IP_URL' => array('type' => 'url'),
 	),
@@ -148,6 +148,16 @@ if ($action === 'update') {
 		}
 		if ($def['type'] === 'yesno') {
 			$val = GETPOST($code, 'int') ? '1' : '0';
+		}
+		if (!empty($def['emails']) && $val !== '') {
+			$list = array_filter(array_map('trim', explode(',', $val)), 'strlen');
+			foreach ($list as $email) {
+				if (!isValidEmail($email)) {
+					setEventMessages($langs->trans('ErrorBadEMail', $email), null, 'errors');
+					$error++;
+				}
+			}
+			$val = implode(', ', $list);
 		}
 		if (getDolGlobalString($code) !== $val) {
 			$changed[] = $code.': "'.getDolGlobalString($code).'" -> "'.$val.'"';
@@ -259,7 +269,7 @@ foreach ($sections as $sectionKey => $sectionFields) {
 		} elseif ($def['type'] === 'url') {
 			print '<input type="text" class="flat minwidth500" name="'.$code.'" value="'.dol_escape_htmltag($current).'">';
 		} else {
-			print '<input type="text" class="flat" size="'.($def['size'] ?? 30).'" name="'.$code.'" value="'.dol_escape_htmltag($current).'">';
+			print '<input type="text" class="flat" size="'.($def['size'] ?? 30).'" name="'.$code.'"'.(empty($def['placeholder']) ? '' : ' placeholder="'.dol_escape_htmltag($def['placeholder']).'"').' value="'.dol_escape_htmltag($current).'">';
 		}
 		print '</td><td class="opacitymedium small">'.$langs->trans($code.'Help').'</td></tr>';
 	}
