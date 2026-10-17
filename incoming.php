@@ -5,6 +5,11 @@
  * Incoming supplier e-Fatura / e-İrsaliye documents: unit lookup, filters, list, detail, mass actions.
  */
 
+// The document view loads in its own request (iframe): it must not rotate the CSRF token of the page around it
+if (in_array($_GET['action'] ?? '', array('displaydoc', 'displaypdf'), true)) {
+	define('NOTOKENRENEWAL', 1);
+}
+
 // Load Dolibarr environment
 $res = 0;
 // Try main.inc.php into web root known defined into CONTEXT_DOCUMENT_ROOT (not always defined)
@@ -75,22 +80,27 @@ $defaultFilters = array('date_start' => dol_get_first_hour(dol_now() - 30 * 8640
 if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter.x', 'alpha') || GETPOST('button_removefilter', 'alpha')) {
 	$filters = $defaultFilters;
 } elseif (GETPOSTISSET('search_submitted')) {
+	// Drop-downs post -1 for their empty choice: an untouched drop-down is not a filter.
+	$choice = function ($name, $check = 'aZ09') {
+		$v = trim((string) GETPOST($name, $check));
+		return $v === '-1' ? '' : $v;
+	};
 	$filters = array(
-		'search' => GETPOST('search_all', 'alphanohtml'),
-		'number' => GETPOST('search_number', 'alphanohtml'),
-		'sender' => GETPOST('search_sender', 'alphanohtml'),
-		'taxcode' => GETPOST('search_taxcode', 'alphanohtml'),
-		'ref' => GETPOST('search_ref', 'alphanohtml'),
-		'scenario' => GETPOST('search_scenario', 'aZ09'),
-		'type' => GETPOST('search_type', 'aZ09'),
-		'status' => GETPOST('search_status', 'aZ09'),
-		'detail_status' => GETPOST('search_detail_status', 'aZ09'),
-		'approval' => GETPOST('search_approval', 'aZ09'),
-		'currency' => GETPOST('search_currency', 'aZ09'),
-		'vendor' => GETPOST('search_vendor', 'alphanohtml'),
-		'unlinked' => GETPOSTINT('search_unlinked'),
-		'amount_min' => GETPOST('search_amount_min', 'alphanohtml'),
-		'amount_max' => GETPOST('search_amount_max', 'alphanohtml'),
+		'search' => trim(GETPOST('search_all', 'alphanohtml')),
+		'number' => trim(GETPOST('search_number', 'alphanohtml')),
+		'sender' => trim(GETPOST('search_sender', 'alphanohtml')),
+		'taxcode' => trim(GETPOST('search_taxcode', 'alphanohtml')),
+		'ref' => trim(GETPOST('search_ref', 'alphanohtml')),
+		'scenario' => $choice('search_scenario'),
+		'type' => $choice('search_type'),
+		'status' => $choice('search_status'),
+		'detail_status' => $choice('search_detail_status'),
+		'approval' => $choice('search_approval'),
+		'currency' => $choice('search_currency'),
+		'vendor' => $choice('search_vendor', 'alphanohtml'),
+		'unlinked' => in_array(GETPOSTINT('search_unlinked'), array(1, 2), true) ? GETPOSTINT('search_unlinked') : 0,
+		'amount_min' => trim(GETPOST('search_amount_min', 'alphanohtml')),
+		'amount_max' => trim(GETPOST('search_amount_max', 'alphanohtml')),
 		'date_start' => GETPOSTDATE('search_date_start'),
 		'date_end' => GETPOSTDATE('search_date_end', 'end'),
 		'received_start' => GETPOSTDATE('search_received_start'),
@@ -105,8 +115,9 @@ if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter.x'
 if (isset($filters['sender']) && dol_strlen(trim($filters['sender'])) < 3) {
 	$filters['sender'] = '';
 }
+// Also cleans filters saved in the session by earlier versions, where untouched drop-downs were kept as -1.
 $filters = array_filter($filters, function ($v) {
-	return $v !== '' && $v !== null && $v !== 0 && $v !== false;
+	return $v !== '' && $v !== null && $v !== 0 && $v !== false && (string) $v !== '-1';
 });
 $_SESSION[$sessionKey] = $filters;
 $filters['kind'] = $kind;
@@ -220,6 +231,38 @@ if ($action === 'viewer' && $id > 0) {
 	exit;
 }
 
+// The document as the sender issued it, readable before import. The HTML comes from the sender's
+// own XSLT, so it is served sandboxed: no scripts, no requests out, no access to this session.
+if (($action === 'displaydoc' || $action === 'displaypdf') && $id > 0) {
+	// The first view waits on the integrator: release the session so the rest of the UI is not blocked meanwhile
+	session_write_close();
+	$doc = new IsnetIncoming($db);
+	$format = $action === 'displaypdf' ? 'pdf' : 'html';
+	$content = $doc->fetch($id) > 0 ? $doc->rendering($format) : '';
+	if ($format === 'pdf' && $content !== '') {
+		header('Content-Type: application/pdf');
+		header('Content-Disposition: '.(GETPOSTINT('inline') ? 'inline' : 'attachment').'; filename="'.dol_sanitizeFileName($doc->invoice_number ?: $doc->ettn).'.pdf"');
+		header('Content-Length: '.strlen($content));
+		print $content;
+		$db->close();
+		exit;
+	}
+	// No PDF falls through to the same plain message the HTML view shows (the session is closed: no flash message)
+	header('Content-Type: text/html; charset=UTF-8');
+	header("Content-Security-Policy: sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:");
+	header('X-Content-Type-Options: nosniff');
+	header('Referrer-Policy: no-referrer');
+	if ($content === '') {
+		print '<!DOCTYPE html><html><body style="font-family: sans-serif; color: #666; padding: 2em;">';
+		print dol_escape_htmltag($langs->transnoentities('IsnetRenderingFailed', $langs->transnoentities($doc->error ?: 'IsnetRenderingNotAvailable')));
+		print '</body></html>';
+	} else {
+		print $content;
+	}
+	$db->close();
+	exit;
+}
+
 if ($action === 'confirm_move' && $confirm === 'yes' && $id > 0 && $canAct) {
 	$doc = new IsnetIncoming($db);
 	$to = GETPOST('to_vendor', 'alphanohtml');
@@ -227,7 +270,7 @@ if ($action === 'confirm_move' && $confirm === 'yes' && $id > 0 && $canAct) {
 		$r = $doc->moveToVendor($to, $user);
 		setEventMessages($r > 0 ? $langs->trans('IsnetUnitMoved', $vendors[$to]) : $doc->error, null, $r > 0 ? 'mesgs' : 'errors');
 	}
-	header('Location: '.$backUrl.'&action=locate&locate_id='.$id);
+	header('Location: '.$backUrl.'&action=locate&locate_id='.$id.'&token='.newToken());
 	exit;
 }
 
@@ -346,11 +389,11 @@ if ($canAct) {
 }
 print load_fiche_titre($title, $morehtml, $isDespatch ? 'dolly' : 'supplier_invoice');
 
-print '<div class="tabBar tabBarWithBottom">';
-print '<a class="'.(!$isDespatch ? 'butAction' : 'butActionSmall').'" href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE">'.$langs->trans('IsnetIncomingInvoices').'</a> ';
-print '<a class="'.($isDespatch ? 'butAction' : 'butActionSmall').'" href="'.$_SERVER['PHP_SELF'].'?kind=DESPATCH">'.$langs->trans('IsnetIncomingDespatches').'</a>';
-print ' &nbsp; <span class="opacitymedium">'.dol_escape_htmltag(getDolGlobalString('MAIN_INFO_SOCIETE_NOM')).'</span>';
-print '</div>';
+$head = array(
+	array($_SERVER['PHP_SELF'].'?kind=INVOICE', $langs->trans('IsnetIncomingInvoices'), 'INVOICE'),
+	array($_SERVER['PHP_SELF'].'?kind=DESPATCH', $langs->trans('IsnetIncomingDespatches'), 'DESPATCH'),
+);
+print dol_get_fiche_head($head, $kind, '', -1, '');
 
 // Connection health
 $lastOk = getDolGlobalInt('ISNETEFATURA_SYNC_LAST_OK');
@@ -376,47 +419,7 @@ if ($action === 'askmove' && $id > 0 && isset($vendors[GETPOST('to_vendor', 'alp
 	print $form->formconfirm($backUrl.'&id='.$id.'&to_vendor='.urlencode($to), $langs->trans('IsnetUnitMove'), $langs->trans('IsnetUnitMoveConfirm', $vendors[$to]), 'confirm_move', '', 0, 1);
 }
 
-/* ---------------------------------------------- card: unit lookup */
-
-if (!$isDespatch) {
-	print '<details class="isnet-card"'.($locateDone ? ' open' : '').'><summary>'.img_picto('', 'search', 'class="pictofixedwidth"').$langs->trans('IsnetUnitLookup').'</summary>';
-	print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="isnet-card-body">';
-	print '<input type="hidden" name="kind" value="INVOICE"><input type="hidden" name="action" value="locate"><input type="hidden" name="token" value="'.newToken().'">';
-	print '<input type="text" class="flat maxwidth150" name="locate_taxcode" placeholder="'.$langs->trans('IsnetSenderVkn').'" value="'.dol_escape_htmltag($locateTax).'"> ';
-	print '<input type="text" class="flat maxwidth200" name="locate_number" placeholder="'.$langs->trans('IsnetInvoiceNumber').'" value="'.dol_escape_htmltag($locateNo).'" required> ';
-	$unitText = '';
-	if ($located) {
-		$vn = $located->vendorNumber($vendors);
-		$unitText = $vn !== '' ? $vn.(isset($vendors[$vn]) ? ' - '.$vendors[$vn] : '') : $langs->transnoentities('IsnetUnitMain');
-	} elseif ($locateDone) {
-		$unitText = $langs->transnoentities('IsnetUnitNotFound');
-	}
-	print '<input type="text" class="flat minwidth200" readonly placeholder="'.$langs->trans('IsnetUnitCurrent').'" value="'.dol_escape_htmltag($unitText).'"> ';
-	print '<button type="submit" class="button small">'.img_picto('', 'search', 'class="pictofixedwidth"').$langs->trans('IsnetUnitLookupButton').'</button>';
-	print '</form>';
-	if ($located) {
-		print '<div class="isnet-card-body">';
-		print '<b>'.dol_escape_htmltag($located->invoice_number).'</b> · '.dol_print_date($located->invoice_date, 'day').' · '.dol_escape_htmltag($located->sender_name).' · '.price($located->total_payable, 0, $langs, 1, -1, -1, $located->currency_code);
-		print ' · <span class="small">'.dol_escape_htmltag($located->status).'</span>';
-		print ' · <a href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=detail&id='.$located->id.'">'.$langs->trans('IsnetDetail').'</a>';
-		if ($canAct && count($vendors) > 1) {
-			print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="inline-block marginleftonly">';
-			print '<input type="hidden" name="kind" value="INVOICE"><input type="hidden" name="action" value="askmove"><input type="hidden" name="id" value="'.$located->id.'"><input type="hidden" name="token" value="'.newToken().'">';
-			$opts = array();
-			foreach ($vendors as $num => $vname) {
-				if ($num !== $located->vendorNumber($vendors)) {
-					$opts[$num] = $num.' - '.$vname;
-				}
-			}
-			print $form->selectarray('to_vendor', $opts, '', 0, 0, 0, '', 0, 0, 0, '', 'minwidth200');
-			print ' <button type="submit" class="button small">'.$langs->trans('IsnetUnitMove').'</button></form>';
-		}
-		print '</div>';
-	}
-	print '</details>';
-}
-
-/* ---------------------------------------------- card: filters */
+/* ---------------------------------------------- filters */
 
 $labels = array(
 	'search' => $langs->trans('Search'), 'number' => $langs->trans('IsnetInvoiceNumber'), 'sender' => $langs->trans('IsnetSenderName'), 'taxcode' => $langs->trans('IsnetSenderVkn'),
@@ -431,7 +434,7 @@ foreach (array('pending', 'expiring', 'accepted', 'auto', 'rejected', 'returned'
 }
 $unlinkedOptions = array(1 => $langs->trans('IsnetTransferNo'), 2 => $langs->trans('IsnetTransferYes'));
 
-// Active filter badges, each with a link that drops just that filter
+// Active filter chips, each with a link that drops just that filter
 $badges = array();
 foreach ($filters as $k => $v) {
 	if ($k === 'kind' || $k === 'date_end' || $k === 'received_end') {
@@ -450,22 +453,17 @@ foreach ($filters as $k => $v) {
 	} elseif ($k === 'vendor') {
 		$text = $v.(isset($vendors[$v]) ? ' - '.$vendors[$v] : '');
 	} else {
-		$text = (string) $v;
+		$text = str_replace('_', ' ', (string) $v);
 	}
-	$badges[] = '<span class="badge badge-secondary isnet-badge">'.dol_escape_htmltag($labels[$k] ?? $k).': '.dol_escape_htmltag(dol_trunc($text, 40)).' <a href="'.$_SERVER['PHP_SELF'].'?'.ltrim(isnetIncomingParams($without, $kind), '&').'" title="'.$langs->trans('RemoveFilter').'">&times;</a></span>';
+	$badges[] = '<span class="isnet-chip">'.dol_escape_htmltag($labels[$k] ?? $k).': <b>'.dol_escape_htmltag(dol_trunc($text, 40)).'</b><a href="'.$_SERVER['PHP_SELF'].'?'.ltrim(isnetIncomingParams($without, $kind), '&').'" title="'.$langs->trans('RemoveFilter').'">&times;</a></span>';
 }
-// Remove the date filter on purpose: keep an explicit "all dates" state instead of falling back to the default
+// The date filter removed on purpose: say so, instead of silently falling back to the default
 if (empty($filters['date_start']) && empty($filters['date_end']) && GETPOSTISSET('search_submitted')) {
-	$badges[] = '<span class="badge badge-secondary isnet-badge">'.$langs->trans('IsnetInvoiceDateRange').': '.$langs->trans('All').'</span>';
+	$badges[] = '<span class="isnet-chip">'.$langs->trans('IsnetInvoiceDateRange').': <b>'.$langs->trans('All').'</b></span>';
 }
-
-print '<details class="isnet-card" open><summary>'.img_picto('', 'filter', 'class="pictofixedwidth"').$langs->trans('IsnetFilters').' <span class="opacitymedium">('.count($badges).')</span></summary>';
-if (!empty($badges)) {
-	print '<div class="isnet-card-body">'.implode(' ', $badges).'</div>';
-}
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" name="isnetfilter" class="isnet-card-body">';
-print '<input type="hidden" name="kind" value="'.$kind.'"><input type="hidden" name="search_submitted" value="1">';
-print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"><input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+// Filters behind "more filters": that section opens by itself when one of them is in use
+$advancedKeys = array('number', 'sender', 'taxcode', 'ref', 'scenario', 'type', 'status', 'detail_status', 'currency', 'vendor', 'amount_min', 'amount_max', 'received_start', 'received_end');
+$nAdvanced = count(array_intersect_key($filters, array_flip($advancedKeys)));
 
 $opt = function ($values, $translatePrefix = '') use ($langs) {
 	$out = array();
@@ -474,91 +472,204 @@ $opt = function ($values, $translatePrefix = '') use ($langs) {
 	}
 	return $out;
 };
-$row = function ($label, $html) {
-	return '<tr><td class="titlefieldmiddle">'.$label.'</td><td>'.$html.'</td></tr>';
+$field = function ($label, $html, $css = '') {
+	return '<div class="isnet-field'.($css !== '' ? ' '.$css : '').'"><span class="isnet-label">'.$label.'</span>'.$html.'</div>';
+};
+// Plain drop-downs: a select2 combo built inside a closed section ends up zero wide
+$select = function ($name, $options, $key) use ($form, $filters, $langs) {
+	return $form->selectarray($name, $options, $filters[$key] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'isnet-input', 0, '', 0, 0);
+};
+$text = function ($name, $key, $more = '') use ($filters) {
+	return '<input type="text" class="flat isnet-input" name="'.$name.'" value="'.dol_escape_htmltag($filters[$key] ?? '').'"'.$more.'>';
+};
+$range = function ($prefix, $startKey, $endKey) use ($form, $filters) {
+	return '<span class="isnet-range">'.$form->selectDate($filters[$startKey] ?? -1, $prefix.'_start', 0, 0, 1, 'isnetfilter', 1, 0).'<span class="opacitymedium">–</span>'.$form->selectDate($filters[$endKey] ?? -1, $prefix.'_end', 0, 0, 1, 'isnetfilter', 1, 0).'</span>';
 };
 
-print '<div class="fichecenter"><div class="fichehalfleft"><table class="border tableforfield centpercent">';
-print $row($langs->trans('IsnetApproval'), $form->selectarray('search_approval', $approvalOptions, $filters['approval'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
-print $row($langs->trans('Status'), $form->selectarray('search_status', $opt($staticIncoming->distinctValues('status', $kind), 'IsnetSt_'), $filters['status'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
-$detailStatuses = $staticIncoming->distinctValues('detail_status', $kind);
-if (!empty($detailStatuses)) {
-	print $row($langs->trans('IsnetDetailStatus'), $form->selectarray('search_detail_status', $opt($detailStatuses, 'IsnetSt_'), $filters['detail_status'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
+print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" name="isnetfilter" class="isnet-panel isnet-filter">';
+print '<input type="hidden" name="kind" value="'.$kind.'"><input type="hidden" name="search_submitted" value="1">';
+print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"><input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+if ($limit != getDolGlobalInt('MAIN_SIZE_LISTE_LIMIT', 25)) {
+	print '<input type="hidden" name="limit" value="'.((int) $limit).'">';
 }
-print $row($langs->trans('IsnetInvoiceNumber'), '<input type="text" class="flat minwidth200" name="search_number" placeholder="'.$langs->trans('IsnetInvoiceNumber').'" value="'.dol_escape_htmltag($filters['number'] ?? '').'">');
-print $row($langs->trans('IsnetScenario'), $form->selectarray('search_scenario', $opt($staticIncoming->distinctValues('scenario', $kind)), $filters['scenario'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
-$senders = $staticIncoming->distinctValues('sender_name', $kind);
-$senderInput = '<input type="text" class="flat minwidth300" name="search_sender" list="isnet_senders" minlength="3" placeholder="'.$langs->trans('IsnetSenderNameHint').'" value="'.dol_escape_htmltag($filters['sender'] ?? '').'">';
-$senderInput .= '<datalist id="isnet_senders">';
-foreach ($senders as $s) {
+
+// Everyday filters, always in view
+print '<div class="isnet-grid">';
+print $field($langs->trans('Search'), '<input type="search" class="flat isnet-input" name="search_all" placeholder="'.$langs->trans('IsnetSearchAllHint').'" value="'.dol_escape_htmltag($filters['search'] ?? '').'">', 'isnet-span2');
+print $field($langs->trans('IsnetInvoiceDateRange'), $range('search_date', 'date_start', 'date_end'), 'isnet-span2');
+if (!$isDespatch) {
+	print $field($langs->trans('IsnetApproval'), $select('search_approval', $approvalOptions, 'approval'));
+	print $field($langs->trans('IsnetTransfer'), $select('search_unlinked', $unlinkedOptions, 'unlinked'));
+}
+print '</div>';
+
+// Everything else
+print '<details class="isnet-adv"'.($nAdvanced ? ' open' : '').'><summary>'.$langs->trans('IsnetMoreFilters').($nAdvanced ? ' <span class="badge badge-info">'.$nAdvanced.'</span>' : '').'</summary>';
+print '<div class="isnet-grid">';
+print $field($langs->trans('IsnetInvoiceNumber'), $text('search_number', 'number'));
+$senderInput = $text('search_sender', 'sender', ' list="isnet_senders" minlength="3" placeholder="'.$langs->trans('IsnetSenderNameHint').'"').'<datalist id="isnet_senders">';
+foreach ($staticIncoming->distinctValues('sender_name', $kind) as $s) {
 	$senderInput .= '<option value="'.dol_escape_htmltag($s).'">';
 }
 $senderInput .= '</datalist>';
-print $row($langs->trans('IsnetSenderName'), $senderInput);
-print $row($langs->trans('IsnetSenderVkn'), '<input type="text" class="flat maxwidth150" name="search_taxcode" inputmode="numeric" placeholder="'.$langs->trans('IsnetSenderVkn').'" value="'.dol_escape_htmltag($filters['taxcode'] ?? '').'">');
-print $row($langs->trans('IsnetTransfer'), $form->selectarray('search_unlinked', $unlinkedOptions, $filters['unlinked'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
-print '</table></div><div class="fichehalfright"><table class="border tableforfield centpercent">';
-print $row($langs->trans('IsnetInvoiceTypeLabel'), $form->selectarray('search_type', $opt($staticIncoming->distinctValues('invoice_type', $kind)), $filters['type'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
-print $row($langs->trans('IsnetInvoiceDateRange'), $form->selectDate($filters['date_start'] ?? -1, 'search_date_start', 0, 0, 1, 'isnetfilter', 1, 0).' - '.$form->selectDate($filters['date_end'] ?? -1, 'search_date_end', 0, 0, 1, 'isnetfilter', 1, 0));
-print $row($langs->trans('IsnetReceivedRange'), $form->selectDate($filters['received_start'] ?? -1, 'search_received_start', 0, 0, 1, 'isnetfilter', 1, 0).' - '.$form->selectDate($filters['received_end'] ?? -1, 'search_received_end', 0, 0, 1, 'isnetfilter', 1, 0));
-print $row($langs->trans('IsnetPayable'), '<input type="text" class="flat maxwidth100" name="search_amount_min" inputmode="decimal" placeholder="'.$langs->trans('IsnetPayableMin').'" value="'.dol_escape_htmltag($filters['amount_min'] ?? '').'"> - <input type="text" class="flat maxwidth100" name="search_amount_max" inputmode="decimal" placeholder="'.$langs->trans('IsnetPayableMax').'" value="'.dol_escape_htmltag($filters['amount_max'] ?? '').'">');
-print $row($langs->trans('IsnetSourceInvoice'), '<input type="text" class="flat minwidth200" name="search_ref" placeholder="'.$langs->trans('IsnetSourceInvoice').'" value="'.dol_escape_htmltag($filters['ref'] ?? '').'">');
+print $field($langs->trans('IsnetSenderName'), $senderInput, 'isnet-span2');
+print $field($langs->trans('IsnetSenderVkn'), $text('search_taxcode', 'taxcode', ' inputmode="numeric"'));
+print $field($langs->trans('IsnetScenario'), $select('search_scenario', $opt($staticIncoming->distinctValues('scenario', $kind)), 'scenario'));
+print $field($langs->trans('IsnetInvoiceTypeLabel'), $select('search_type', $opt($staticIncoming->distinctValues('invoice_type', $kind)), 'type'));
+print $field($langs->trans('Status'), $select('search_status', $opt($staticIncoming->distinctValues('status', $kind), 'IsnetSt_'), 'status'));
+$detailStatuses = $staticIncoming->distinctValues('detail_status', $kind);
+if (!empty($detailStatuses)) {
+	print $field($langs->trans('IsnetDetailStatus'), $select('search_detail_status', $opt($detailStatuses, 'IsnetSt_'), 'detail_status'));
+}
+print $field($langs->trans('IsnetPayable'), '<span class="isnet-range">'.$text('search_amount_min', 'amount_min', ' inputmode="decimal" placeholder="'.$langs->trans('IsnetPayableMin').'"').'<span class="opacitymedium">–</span>'.$text('search_amount_max', 'amount_max', ' inputmode="decimal" placeholder="'.$langs->trans('IsnetPayableMax').'"').'</span>');
+if (!$isDespatch) {
+	print $field($langs->trans('IsnetSourceInvoice'), $text('search_ref', 'ref'));
+}
 $currencies = $staticIncoming->distinctValues('currency_code', $kind);
 if (count($currencies) > 1) {
-	print $row($langs->trans('Currency'), $form->selectarray('search_currency', array_combine($currencies, $currencies), $filters['currency'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100'));
+	print $field($langs->trans('Currency'), $select('search_currency', array_combine($currencies, $currencies), 'currency'));
 }
 if (count($vendors) > 1) {
 	$vopts = array();
 	foreach ($vendors as $num => $vname) {
 		$vopts[$num] = $num.' - '.$vname;
 	}
-	print $row($langs->trans('IsnetUnit'), $form->selectarray('search_vendor', $vopts, $filters['vendor'] ?? '', 1, 0, 0, '', 0, 0, 0, '', 'minwidth200'));
+	print $field($langs->trans('IsnetUnit'), $select('search_vendor', $vopts, 'vendor'));
 }
-print $row($langs->trans('Search'), '<input type="text" class="flat minwidth200" name="search_all" placeholder="'.$langs->trans('IsnetSearchAllHint').'" value="'.dol_escape_htmltag($filters['search'] ?? '').'">');
-print '</table></div></div><div class="clearboth"></div>';
-print '<div class="right paddingtop">';
-print '<button type="submit" class="button small" name="button_removefilter" value="1">'.img_picto('', 'eraser', 'class="pictofixedwidth"').$langs->trans('RemoveFilter').'</button> ';
-print '<button type="submit" class="button">'.img_picto('', 'search', 'class="pictofixedwidth"').$langs->trans('Search').'</button>';
-print '</div></form></details>';
+print $field($langs->trans('IsnetReceivedRange'), $range('search_received', 'received_start', 'received_end'), 'isnet-span2');
+print '</div></details>';
 
-/* ---------------------------------------------- detail panel */
+// Active filters on the left, buttons on the right
+print '<div class="isnet-filter-foot">';
+print '<div class="isnet-chips">'.implode('', $badges).'</div>';
+print '<div class="isnet-buttons">';
+print '<button type="submit" class="button button-cancel small" name="button_removefilter" value="1" title="'.$langs->trans('IsnetResetFiltersHint').'">'.img_picto('', 'eraser', 'class="pictofixedwidth"').$langs->trans('IsnetResetFilters').'</button>';
+print '<button type="submit" class="button small">'.img_picto('', 'search', 'class="pictofixedwidth"').$langs->trans('Search').'</button>';
+print '</div></div>';
+print '</form>';
 
-if ($action === 'detail' && $id > 0) {
+/* ---------------------------------------------- unit lookup */
+
+if (!$isDespatch) {
+	print '<details class="isnet-panel isnet-adv isnet-lookup"'.($locateDone ? ' open' : '').'><summary>'.$langs->trans('IsnetUnitLookup').'</summary>';
+	print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="isnet-grid">';
+	print '<input type="hidden" name="kind" value="INVOICE"><input type="hidden" name="action" value="locate"><input type="hidden" name="token" value="'.newToken().'">';
+	print $field($langs->trans('IsnetSenderVkn'), '<input type="text" class="flat isnet-input" name="locate_taxcode" inputmode="numeric" value="'.dol_escape_htmltag($locateTax).'">');
+	print $field($langs->trans('IsnetInvoiceNumber'), '<input type="text" class="flat isnet-input" name="locate_number" value="'.dol_escape_htmltag($locateNo).'" required>');
+	$unitText = '';
+	if ($located) {
+		$vn = $located->vendorNumber($vendors);
+		$unitText = $vn !== '' ? $vn.(isset($vendors[$vn]) ? ' - '.$vendors[$vn] : '') : $langs->transnoentities('IsnetUnitMain');
+	} elseif ($locateDone) {
+		$unitText = $langs->transnoentities('IsnetUnitNotFound');
+	}
+	print $field($langs->trans('IsnetUnitCurrent'), '<input type="text" class="flat isnet-input" readonly value="'.dol_escape_htmltag($unitText).'">');
+	print '<div class="isnet-field isnet-field-button"><button type="submit" class="button small">'.img_picto('', 'search', 'class="pictofixedwidth"').$langs->trans('IsnetUnitLookupButton').'</button></div>';
+	print '</form>';
+	if ($located) {
+		print '<div class="isnet-located">';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=view&id='.$located->id.'#isnet-detail"><b>'.dol_escape_htmltag($located->invoice_number).'</b></a> · '.dol_print_date($located->invoice_date, 'day').' · '.dol_escape_htmltag($located->sender_name).' · '.price($located->total_payable, 0, $langs, 1, -1, -1, $located->currency_code);
+		if ($canAct && count($vendors) > 1) {
+			print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="isnet-inline">';
+			print '<input type="hidden" name="kind" value="INVOICE"><input type="hidden" name="action" value="askmove"><input type="hidden" name="id" value="'.$located->id.'"><input type="hidden" name="token" value="'.newToken().'">';
+			$opts = array();
+			foreach ($vendors as $num => $vname) {
+				if ($num !== $located->vendorNumber($vendors)) {
+					$opts[$num] = $num.' - '.$vname;
+				}
+			}
+			print $form->selectarray('to_vendor', $opts, '', 0, 0, 0, '', 0, 0, 0, '', 'minwidth200', 0);
+			print '<button type="submit" class="button small">'.$langs->trans('IsnetUnitMove').'</button></form>';
+		}
+		print '</div>';
+	}
+	print '</details>';
+}
+
+/* ---------------------------------------------- detail / preview panel */
+
+if ($action === 'view' && $id > 0) {
 	$d = new IsnetIncoming($db);
 	if ($d->fetch($id) > 0) {
-		print '<div class="isnet-card isnet-detail">';
-		print '<div class="isnet-card-title"><b>'.dol_escape_htmltag($d->invoice_number).'</b> · '.dol_escape_htmltag($d->sender_name).' <span class="opacitymedium">('.dol_escape_htmltag($d->sender_tax_code).')</span>';
-		print '<a class="right" href="'.$backUrl.'">'.img_picto($langs->trans('Close'), 'close_title').'</a></div>';
-		print '<table class="border tableforfield centpercent">';
-		$vn = $d->vendorNumber($vendors);
-		$info = array(
-			'ETTN' => $d->ettn,
-			$langs->trans('Date') => dol_print_date($d->invoice_date, 'day').' / '.$langs->trans('DateDue').': '.dol_print_date($d->due_date, 'day'),
-			$langs->trans('IsnetReceivedDate') => dol_print_date($d->date_received, 'dayhour'),
-			$langs->trans('IsnetScenario') => $d->scenario.' / '.$d->invoice_type,
-			$langs->trans('Status') => trim($d->status.' '.$d->detail_status).($d->response_status !== '' ? ' / '.$d->response_status : ''),
-			$langs->trans('IsnetSourceInvoice') => $d->billing_reference,
-			$langs->trans('IsnetOrderNumber') => $d->order_number,
-			$langs->trans('IsnetUnit') => $vn !== '' ? $vn.(isset($vendors[$vn]) ? ' - '.$vendors[$vn] : '') : '',
-			$langs->trans('Address') => trim($d->sender_address.' '.$d->sender_zip.' '.$d->sender_town.' / '.$d->sender_city, ' /').($d->sender_tax_office !== '' ? ' · '.$d->sender_tax_office : ''),
-		);
-		foreach ($info as $k => $v) {
-			if ((string) $v !== '') {
-				print '<tr><td class="titlefieldmiddle">'.$k.'</td><td>'.dol_escape_htmltag($v).'</td></tr>';
+		$isInvoice = ($d->doc_kind === 'INVOICE');
+		print '<div class="isnet-panel isnet-detail" id="isnet-detail">';
+
+		// Title and the things one can do with the document
+		print '<div class="isnet-detail-head">';
+		print '<div><span class="isnet-detail-no">'.dol_escape_htmltag($d->invoice_number).'</span> <span class="opacitymedium">'.dol_print_date($d->invoice_date, 'day').'</span><br>';
+		print dol_escape_htmltag($d->sender_name).' <span class="opacitymedium">('.dol_escape_htmltag($d->sender_tax_code).')</span></div>';
+		print '<div class="isnet-detail-actions">';
+		if ($isInvoice) {
+			print '<div class="isnet-group">';
+			print '<a class="button small" href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=displaypdf&id='.$d->id.'&token='.newToken().'">'.img_picto('', 'pdf', 'class="pictofixedwidth"').$langs->trans('IsnetDownloadPdf').'</a>';
+			print '</div>';
+			if ($canAct) {
+				print '<div class="isnet-group">';
+				if ($d->fk_facture_fourn > 0) {
+					$ff = new FactureFournisseur($db);
+					if ($ff->fetch($d->fk_facture_fourn) > 0) {
+						print $ff->getNomUrl(1);
+					}
+				} else {
+					print '<a class="button small" href="'.$backUrl.'&action=import&id='.$d->id.'&token='.newToken().'">'.img_picto('', 'bill', 'class="pictofixedwidth"').$langs->trans('IsnetIncomingImport').'</a>';
+				}
+				print '</div>';
+				if ($d->canReply() && $d->scenario === 'TICARIFATURA') {
+					print '<div class="isnet-group">';
+					print '<a class="button small" href="'.$backUrl.'&action=accept&id='.$d->id.'&token='.newToken().'">'.img_picto('', 'check', 'class="pictofixedwidth"').$langs->trans('IsnetIncomingAccept').'</a>';
+					print '<a class="button small button-cancel" href="'.$backUrl.'&action=askreject&id='.$d->id.'&token='.newToken().'">'.img_picto('', 'error', 'class="pictofixedwidth"').$langs->trans('IsnetIncomingReject').'</a>';
+					print '</div>';
+				}
 			}
 		}
-		print '</table>';
+		print '<a class="isnet-close" href="'.$backUrl.'" title="'.$langs->trans('Close').'">&times;</a>';
+		print '</div></div>';
+
+		// Key facts in two columns
+		$vn = $d->vendorNumber($vendors);
+		$st = $d->approvalState();
+		$info = array(
+			$langs->trans('IsnetPayable') => '<b>'.price($d->total_payable, 0, $langs, 1, -1, -1, $d->currency_code).'</b> <span class="opacitymedium">('.$langs->trans('AmountHT').' '.price($d->total_line_ext, 0, $langs, 1, -1, -1, $d->currency_code).' + '.$langs->trans('VAT').' '.price($d->total_vat, 0, $langs, 1, -1, -1, $d->currency_code).')</span>',
+			$langs->trans('IsnetScenario') => dol_escape_htmltag(str_replace('_', ' ', $d->scenario.' / '.$d->invoice_type)),
+			$langs->trans('Status') => ($st !== '' ? dol_escape_htmltag($langs->trans('IsnetApproval_'.$st)).' · ' : '').'<span class="opacitymedium">'.dol_escape_htmltag(str_replace('_', ' ', trim($d->status.' '.$d->detail_status))).'</span>',
+			$langs->trans('DateDue') => dol_print_date($d->due_date, 'day'),
+			$langs->trans('IsnetReceivedDate') => dol_print_date($d->date_received, 'dayhour'),
+			$langs->trans('IsnetSourceInvoice') => dol_escape_htmltag($d->billing_reference),
+			$langs->trans('IsnetOrderNumber') => dol_escape_htmltag($d->order_number),
+			$langs->trans('IsnetUnit') => dol_escape_htmltag($vn !== '' ? $vn.(isset($vendors[$vn]) ? ' - '.$vendors[$vn] : '') : ''),
+			$langs->trans('Address') => dol_escape_htmltag(trim($d->sender_address.' '.$d->sender_zip.' '.$d->sender_town.' / '.$d->sender_city, ' /').($d->sender_tax_office !== '' ? ' · '.$d->sender_tax_office : '')),
+			'ETTN' => '<span class="small">'.dol_escape_htmltag($d->ettn).'</span>',
+		);
+		$info = array_filter($info, function ($v) {
+			$t = trim(strip_tags($v));
+			return $t !== '' && $t !== '0';
+		});
+		print '<dl class="isnet-facts">';
+		foreach ($info as $k => $v) {
+			print '<div><dt>'.$k.'</dt><dd>'.$v.'</dd></div>';
+		}
+		print '</dl>';
+
+		// The document itself as the sender issued it (integrator's HTML view, kept locally after the first look)
+		if ($isInvoice) {
+			print '<div class="isnet-doc-wrap"><div class="isnet-doc-loading">'.$langs->trans('IsnetDocumentLoading').'</div>';
+			print '<iframe class="isnet-doc" sandbox="" referrerpolicy="no-referrer" title="'.dol_escape_htmltag($d->invoice_number).'" src="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=displaydoc&id='.$d->id.'"></iframe></div>';
+			print '<div class="small opacitymedium paddingtop">'.$langs->trans('IsnetDocumentHint').' <a href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=displaypdf&inline=1&id='.$d->id.'&token='.newToken().'" target="_blank" rel="noopener">'.$langs->trans('IsnetOpenPdf').'</a>';
+			print ' · <a href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=viewer&id='.$d->id.'&token='.newToken().'" target="_blank" rel="noopener">'.$langs->trans('IsnetViewDocument').'</a></div>';
+		}
+
+		// Lines as received in the list data (the document view above shows them too)
 		$lines = $d->lines();
 		if (!empty($lines)) {
-			print '<table class="noborder centpercent margintoponly"><tr class="liste_titre"><td>'.$langs->trans('Description').'</td><td class="right">'.$langs->trans('Qty').'</td><td>'.$langs->trans('Unit').'</td><td class="right">'.$langs->trans('PriceUHT').'</td><td class="right">'.$langs->trans('VAT').' %</td><td class="right">'.$langs->trans('Discount').'</td><td class="right">'.$langs->trans('AmountHT').'</td></tr>';
+			print '<details class="isnet-lines"'.($isInvoice ? '' : ' open').'><summary>'.$langs->trans('IsnetLinesCount', count($lines)).'</summary>';
+			print '<table class="noborder centpercent"><tr class="liste_titre"><td>'.$langs->trans('Description').'</td><td class="right">'.$langs->trans('Qty').'</td><td>'.$langs->trans('Unit').'</td><td class="right">'.$langs->trans('PriceUHT').'</td><td class="right">'.$langs->trans('VAT').' %</td><td class="right">'.$langs->trans('Discount').'</td><td class="right">'.$langs->trans('AmountHT').'</td></tr>';
 			foreach ($lines as $l) {
 				print '<tr class="oddeven"><td>'.dol_escape_htmltag($l['name']).($l['note'] !== '' ? '<br><span class="small opacitymedium">'.dol_escape_htmltag($l['note']).'</span>' : '').'</td>';
 				print '<td class="right">'.price($l['qty'], 0, $langs, 0, -1).'</td><td>'.dol_escape_htmltag($l['unit']).'</td>';
 				print '<td class="right">'.price($l['unit_price'], 0, $langs, 0, -1, -1, $d->currency_code).'</td><td class="right">'.price($l['vat_rate'], 0, $langs, 0, -1).'</td>';
 				print '<td class="right">'.($l['discount'] > 0 ? price($l['discount'], 0, $langs, 0, -1, -1, $d->currency_code) : '').'</td><td class="right">'.price($l['line_ext'], 0, $langs, 0, -1, -1, $d->currency_code).'</td></tr>';
 			}
-			print '<tr class="liste_total"><td colspan="6" class="right">'.$langs->trans('AmountHT').' / '.$langs->trans('VAT').' / '.$langs->trans('IsnetPayable').'</td><td class="right nowraponall">'.price($d->total_line_ext, 0, $langs, 1, -1, -1, $d->currency_code).'<br>'.price($d->total_vat, 0, $langs, 1, -1, -1, $d->currency_code).'<br><b>'.price($d->total_payable, 0, $langs, 1, -1, -1, $d->currency_code).'</b></td></tr>';
-			print '</table>';
+			print '</table></details>';
 		}
 		print '</div>';
 	}
@@ -593,18 +704,14 @@ if (!empty($arrayofmassactions)) {
 print_liste_field_titre('Date', $_SERVER['PHP_SELF'], 'invoice_date', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('IsnetInvoiceNumber', $_SERVER['PHP_SELF'], 'invoice_number', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('Supplier', $_SERVER['PHP_SELF'], 'sender_name', '', $param, '', $sortfield, $sortorder);
-print_liste_field_titre('IsnetScenario', $_SERVER['PHP_SELF'], 'scenario', '', $param, '', $sortfield, $sortorder);
 if ($showVendor) {
 	print_liste_field_titre('IsnetUnit', $_SERVER['PHP_SELF'], 'company_vendor_number', '', $param, '', $sortfield, $sortorder);
 }
-print_liste_field_titre('AmountHT', $_SERVER['PHP_SELF'], 'total_line_ext', '', $param, '', $sortfield, $sortorder, 'right ');
-print_liste_field_titre('VAT', $_SERVER['PHP_SELF'], 'total_vat', '', $param, '', $sortfield, $sortorder, 'right ');
 print_liste_field_titre('IsnetPayable', $_SERVER['PHP_SELF'], 'total_payable', '', $param, '', $sortfield, $sortorder, 'right ');
 print_liste_field_titre('Status', $_SERVER['PHP_SELF'], 'status', '', $param, '', $sortfield, $sortorder);
-print_liste_field_titre('SupplierInvoice', $_SERVER['PHP_SELF'], '', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('', $_SERVER['PHP_SELF'], '', '', $param, '', $sortfield, $sortorder);
 print '</tr>';
-$ncols = 10 + ($showVendor ? 1 : 0) + (!empty($arrayofmassactions) ? 1 : 0);
+$ncols = 6 + ($showVendor ? 1 : 0) + (!empty($arrayofmassactions) ? 1 : 0);
 
 if (empty($list)) {
 	print '<tr class="oddeven"><td colspan="'.$ncols.'"><span class="opacitymedium">'.$langs->trans($total === 0 && empty($badges) ? 'IsnetIncomingEmpty' : 'NoRecordFound').'</span></td></tr>';
@@ -613,7 +720,7 @@ if (empty($list)) {
 $socCache = array();
 $approvalBadge = array('pending' => 'badge-status1', 'accepted' => 'badge-status4', 'auto' => 'badge-status4', 'rejected' => 'badge-status8', 'returned' => 'badge-status8');
 foreach ($list as $d) {
-	print '<tr class="oddeven'.($action === 'detail' && $id === $d->id ? ' highlight' : '').'">';
+	print '<tr class="oddeven'.($action === 'view' && $id === $d->id ? ' highlight' : '').'">';
 	if (!empty($arrayofmassactions)) {
 		print '<td class="center"><input id="cb'.$d->id.'" class="flat checkforselect" type="checkbox" name="toselect[]" value="'.$d->id.'"></td>';
 	}
@@ -622,13 +729,13 @@ foreach ($list as $d) {
 		print '<br><span class="small opacitymedium" title="'.$langs->trans('IsnetReceivedDate').'">'.dol_print_date($d->date_received, 'dayhour').'</span>';
 	}
 	print '</td>';
-	print '<td class="nowraponall"><a href="'.$backUrl.'&action=detail&id='.$d->id.'">'.dol_escape_htmltag($d->invoice_number).'</a>';
-	print '<br><span class="small opacitymedium" title="'.dol_escape_htmltag($d->ettn).'">'.dol_escape_htmltag(substr($d->ettn, 0, 8)).'…</span>';
+	print '<td class="nowraponall"><a href="'.$backUrl.'&action=view&id='.$d->id.'#isnet-detail" title="'.$langs->trans('IsnetPreview').'">'.dol_escape_htmltag($d->invoice_number).'</a>';
+	print '<br><span class="small opacitymedium" title="ETTN '.dol_escape_htmltag($d->ettn).'">'.dol_escape_htmltag(str_replace('_', ' ', $d->scenario.($d->invoice_type !== '' ? ' · '.$d->invoice_type : ''))).'</span>';
 	if ($d->billing_reference !== '') {
 		print '<br><span class="small" title="'.$langs->trans('IsnetSourceInvoice').'">↳ '.dol_escape_htmltag($d->billing_reference).'</span>';
 	}
 	print '</td>';
-	print '<td class="tdoverflowmax250">';
+	print '<td class="tdoverflowmax180">';
 	if ($d->fk_soc > 0) {
 		if (!isset($socCache[$d->fk_soc])) {
 			$socCache[$d->fk_soc] = new Societe($db);
@@ -643,14 +750,12 @@ foreach ($list as $d) {
 	}
 	print '<br><span class="small opacitymedium">'.dol_escape_htmltag($d->sender_tax_code).'</span>';
 	print '</td>';
-	print '<td class="nowraponall">'.dol_escape_htmltag($d->scenario).'<br><span class="small opacitymedium">'.dol_escape_htmltag($d->invoice_type).'</span></td>';
 	if ($showVendor) {
 		$vn = $d->vendorNumber($vendors);
 		print '<td class="tdoverflowmax150" title="'.dol_escape_htmltag($vendors[$vn] ?? '').'">'.dol_escape_htmltag($vn !== '' ? ($vendors[$vn] ?? $vn) : '').'</td>';
 	}
-	print '<td class="right nowraponall">'.price($d->total_line_ext, 0, $langs, 1, -1, -1, $d->currency_code).'</td>';
-	print '<td class="right nowraponall">'.price($d->total_vat, 0, $langs, 1, -1, -1, $d->currency_code).'</td>';
-	print '<td class="right nowraponall"><b>'.price($d->total_payable, 0, $langs, 1, -1, -1, $d->currency_code).'</b></td>';
+	print '<td class="right nowraponall"><b>'.price($d->total_payable, 0, $langs, 1, -1, -1, $d->currency_code).'</b>';
+	print '<br><span class="small opacitymedium" title="'.$langs->trans('AmountHT').' / '.$langs->trans('VAT').'">'.price($d->total_line_ext, 0, $langs, 1, -1, -1).' + '.price($d->total_vat, 0, $langs, 1, -1, -1).'</span></td>';
 	print '<td class="nowraponall">';
 	$st = $d->approvalState();
 	if ($st !== '') {
@@ -664,17 +769,13 @@ foreach ($list as $d) {
 		print '<span class="small">'.dol_escape_htmltag(str_replace('_', ' ', $d->status)).'</span>';
 	}
 	print '</td>';
-	print '<td class="nowraponall">';
+	print '<td class="nowraponall right"><div class="isnet-rowact">';
+	print '<a class="isnet-show" href="'.$backUrl.'&action=view&id='.$d->id.'#isnet-detail" title="'.$langs->trans('IsnetPreview').'">'.img_picto('', 'eye', 'class="pictofixedwidth"').$langs->trans('IsnetShow').'</a>';
 	if ($d->fk_facture_fourn > 0) {
 		$ff = new FactureFournisseur($db);
 		if ($ff->fetch($d->fk_facture_fourn) > 0) {
-			print $ff->getNomUrl(1);
+			print '<span title="'.$langs->trans('SupplierInvoice').'">'.$ff->getNomUrl(1).'</span>';
 		}
-	}
-	print '</td>';
-	print '<td class="nowraponall right">';
-	if (!$isDespatch) {
-		print '<a class="reposition paddingright" href="'.$_SERVER['PHP_SELF'].'?kind=INVOICE&action=viewer&id='.$d->id.'&token='.newToken().'" target="_blank" rel="noopener" title="'.$langs->trans('IsnetViewDocument').'">'.img_picto('', 'eye').'</a>';
 	}
 	if ($canAct) {
 		if ($isDespatch) {
@@ -683,39 +784,90 @@ foreach ($list as $d) {
 			}
 		} else {
 			if ($d->fk_facture_fourn <= 0) {
-				print '<a class="butActionSmall" href="'.$backUrl.'&action=import&id='.$d->id.'&token='.newToken().'">'.$langs->trans('IsnetIncomingImport').'</a> ';
+				print '<a class="butActionSmall" href="'.$backUrl.'&action=import&id='.$d->id.'&token='.newToken().'">'.$langs->trans('IsnetIncomingImport').'</a>';
 			}
 			if ($d->canReply() && $d->scenario === 'TICARIFATURA') {
-				print '<a class="reposition" href="'.$backUrl.'&action=accept&id='.$d->id.'&token='.newToken().'">'.img_picto($langs->trans('IsnetIncomingAccept'), 'check').'</a> ';
+				print '<a class="reposition" href="'.$backUrl.'&action=accept&id='.$d->id.'&token='.newToken().'">'.img_picto($langs->trans('IsnetIncomingAccept'), 'check').'</a>';
 				print '<a class="reposition" href="'.$backUrl.'&action=askreject&id='.$d->id.'&token='.newToken().'">'.img_picto($langs->trans('IsnetIncomingReject'), 'error').'</a>';
 			}
 		}
 	}
-	print '</td>';
+	print '</div></td>';
 	print '</tr>';
 }
 
 // Totals of every matching row (not only this page), per currency
 if ($total > 0) {
-	$lead = 4 + ($showVendor ? 1 : 0) + (!empty($arrayofmassactions) ? 1 : 0);
+	$lead = 3 + ($showVendor ? 1 : 0) + (!empty($arrayofmassactions) ? 1 : 0);
 	foreach ($staticIncoming->totalsByCurrency($filters) as $cur => $t) {
 		print '<tr class="liste_total"><td colspan="'.$lead.'" class="right">'.$langs->trans('Total').' '.dol_escape_htmltag($cur).' <span class="opacitymedium">('.$t['n'].')</span></td>';
-		print '<td class="right nowraponall">'.price($t['ht'], 0, $langs, 1, -1, -1, $cur).'</td>';
-		print '<td class="right nowraponall">'.price($t['vat'], 0, $langs, 1, -1, -1, $cur).'</td>';
-		print '<td class="right nowraponall"><b>'.price($t['ttc'], 0, $langs, 1, -1, -1, $cur).'</b></td>';
-		print '<td colspan="3"></td></tr>';
+		print '<td class="right nowraponall"><b>'.price($t['ttc'], 0, $langs, 1, -1, -1, $cur).'</b>';
+		print '<br><span class="small opacitymedium">'.price($t['ht'], 0, $langs, 1, -1, -1).' + '.price($t['vat'], 0, $langs, 1, -1, -1).'</span></td>';
+		print '<td colspan="2"></td></tr>';
 	}
 }
 print '</table></div>';
 print '</form>';
 
+print dol_get_fiche_end(-1);
+
 print '<style>
-.isnet-card { border: 1px solid var(--colortopbordertitle1, #ccc); border-radius: 6px; margin: 10px 0; background: var(--colorbacklineimpair1, #fff); }
-.isnet-card > summary { cursor: pointer; padding: 8px 12px; font-weight: bold; }
-.isnet-card-body, .isnet-card-title { padding: 6px 12px 10px 12px; }
-.isnet-detail { padding-bottom: 8px; }
-.isnet-badge { margin: 2px 4px 2px 0; display: inline-block; }
-.isnet-badge a { margin-left: 4px; font-weight: bold; }
+.page-incoming .isnet-panel { border: 1px solid var(--cds-border-subtle-01, var(--colortopbordertitle1, #ddd)); border-radius: var(--cs-radius, 8px); padding: 14px 16px; margin: 10px 0 14px 0; background: var(--cds-layer-01, var(--colorbacklineimpair1, #fff)); }
+.isnet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px 16px; align-items: end; }
+.isnet-span2 { grid-column: span 2; }
+.isnet-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.isnet-label { font-size: var(--cds-label-01-font-size, 0.85em); color: var(--cds-text-secondary, inherit); opacity: var(--cs-label-opacity, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.isnet-field .isnet-input, .isnet-field select.isnet-input { width: 100%; max-width: none; box-sizing: border-box; margin: 0; }
+.isnet-range { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.isnet-range > .isnet-input { flex: 1 1 0; min-width: 0; }
+.isnet-range .divfordateinput { display: flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; }
+.isnet-range .divfordateinput input { flex: 1 1 auto; width: 100%; min-width: 0; max-width: none; box-sizing: border-box; }
+.isnet-adv { margin-top: 12px; }
+.isnet-adv > summary { cursor: pointer; width: fit-content; color: var(--cds-link-primary, var(--colortextlink, #0a1464)); user-select: none; }
+.isnet-adv[open] > summary { margin-bottom: 12px; }
+.isnet-adv > .isnet-grid { padding-top: 12px; border-top: 1px dashed var(--cds-border-subtle-01, var(--colortopbordertitle1, #ddd)); }
+.page-incoming .isnet-lookup { padding-top: 10px; padding-bottom: 10px; }
+.isnet-lookup .isnet-adv, .isnet-lookup.isnet-adv { margin-top: 0; }
+.isnet-field-button { justify-content: flex-end; }
+.isnet-located { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.isnet-inline { display: inline-flex; gap: 6px; align-items: center; }
+.isnet-filter-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+.isnet-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.isnet-chip { display: inline-flex; align-items: center; padding: 3px 4px 3px 10px; border-radius: 14px; background: var(--cds-tag-background-gray, var(--colorbacktitle1, #eef0f4)); color: var(--cds-tag-color-gray, inherit); font-size: var(--cds-label-01-font-size, 0.9em); }
+.isnet-chip a { padding: 0 6px; margin-left: 4px; font-weight: bold; text-decoration: none; opacity: 0.6; }
+.isnet-chip a:hover { opacity: 1; }
+.isnet-buttons { display: flex; gap: 8px; margin-left: auto; }
+.isnet-buttons .button, .isnet-detail-actions .button { margin: 0; }
+.isnet-detail { position: relative; }
+.isnet-detail-head { padding-right: 28px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px 20px; flex-wrap: wrap; }
+.isnet-detail-no { font-size: 1.25em; font-weight: bold; }
+.isnet-detail-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; }
+.isnet-group { display: flex; align-items: center; gap: 8px; }
+.isnet-group + .isnet-group { padding-left: 20px; border-left: 1px solid var(--cds-border-subtle-01, var(--colortopbordertitle1, #ddd)); }
+.isnet-close { position: absolute; top: 10px; right: 12px; font-size: 1.6em; line-height: 1; padding: 0 4px; text-decoration: none; opacity: 0.6; }
+.isnet-close:hover { opacity: 1; }
+.isnet-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 24px; margin: 14px 0; }
+.isnet-facts dt { font-size: var(--cds-label-01-font-size, 0.85em); color: var(--cds-text-secondary, inherit); opacity: var(--cs-label-opacity, 0.7); }
+.isnet-facts dd { margin: 2px 0 0 0; overflow-wrap: anywhere; }
+.isnet-doc-wrap { position: relative; border: 1px solid var(--cds-border-subtle-01, var(--colortopbordertitle1, #ddd)); border-radius: var(--cs-radius, 6px); background: #fff; overflow: hidden; }
+.isnet-doc-loading { position: absolute; top: 40px; left: 0; right: 0; text-align: center; color: var(--cds-text-helper, #888); }
+.isnet-doc { position: relative; display: block; width: 100%; height: 80vh; min-height: 480px; border: 0; background: transparent; }
+.isnet-lines { margin-top: 12px; }
+.isnet-lines > summary { cursor: pointer; padding: 4px 0; color: var(--cds-link-primary, var(--colortextlink, #0a1464)); }
+.page-incoming .div-table-responsive { width: 0; min-width: 100%; }
+.page-incoming .isnet-panel, .page-incoming .isnet-filter { width: 0; min-width: 100%; box-sizing: border-box; }
+.isnet-rowact { display: inline-flex; align-items: center; justify-content: flex-end; gap: 16px; }
+.isnet-rowact .butActionSmall { margin: 0; }
+.isnet-show { white-space: nowrap; }
+@media (max-width: 767px) {
+	.isnet-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+	.isnet-span2 { grid-column: 1 / -1; }
+	.isnet-detail-actions { width: 100%; }
+	.isnet-group + .isnet-group { padding-left: 0; border-left: 0; }
+	.isnet-buttons { width: 100%; }
+	.isnet-buttons .button { flex: 1; }
+	.isnet-doc { height: 70vh; }
+}
 </style>';
 
 llxFooter();

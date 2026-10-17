@@ -10,7 +10,7 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 | Dolibarr | 20.0+ (24.0 üzerinde geliştirildi ve test edildi) |
 | PHP | 8.1+, `soap`, `curl`, `mbstring` eklentileri |
 | Lisans | GPL-3.0-or-later + yazar atfı şartı ([ATTRIBUTION.md](ATTRIBUTION.md)) |
-| Sürüm | 0.6.0 |
+| Sürüm | 0.6.2 |
 
 ## Neler yapıyor
 
@@ -27,6 +27,7 @@ Topluluk projesidir; İşNet veya GİB ile resmi bir bağı yoktur.
 
 **Menü**
 - Fatura menüsünde **e-Faturalar** bölümü: Gönderilen e-Faturalar, Gelen e-Faturalar, Gönderilen e-İrsaliyeler, Gelen e-İrsaliyeler
+- **Gelen e-Fatura önizleme (0.6.1):** faturayı içe aktarmadan, gönderenin şablonuyla görüntüleme (korumalı çerçevede) ve PDF indirme; görüntü ilk açılışta sunucuda saklanır
 - **Gelen e-Faturalar ekranı (0.6.0):** fatura birim sorgulama ve birime yönlendirme, katlanır filtre paneli (onay durumu, yanıt süresi dolanlar, fatura/geliş tarihi aralığı, tutar aralığı, senaryo, tip, gönderici adı/VKN, kaynak fatura no, aktarım durumu, birim, para birimi), aktif filtre rozetleri, sıralama/sayfalama, para birimi toplamları, detay paneli, İşNet görüntüleyici, toplu aktar/cari eşle/kabul, CSV dışa aktarım
 - **Bağlantı sağlığı:** senkron hatası ekranda uyarı olarak görünür; art arda N hatada (ve düzelince) e-posta; bağlantı hatalarında sunucunun çıkış IP'si gösterilir
 - Gönderilen belgeler listesi: arama, duruma göre filtre, sayfalama, tek tek ya da toplu durum yenileme, imzalı PDF kaydı

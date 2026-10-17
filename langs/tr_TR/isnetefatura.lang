@@ -421,3 +421,17 @@ IsnetSt_Otomatik_Onaylandi=Otomatik onaylandı
 IsnetSt_Iade_Edildi=İade edildi
 IsnetSt_Reddedildi=Reddedildi
 IsnetSt_Basariyla_Tamamlandi=Başarıyla tamamlandı
+
+# 0.6.1 - gelen ekran sadeleştirme ve belge önizleme
+IsnetMoreFilters=Daha fazla filtre
+IsnetResetFilters=Sıfırla
+IsnetResetFiltersHint=Tüm filtreleri kaldırır, son 30 güne döner
+IsnetPreview=Faturayı görüntüle (içe aktarmadan)
+IsnetDownloadPdf=PDF indir
+IsnetOpenPdf=PDF'i yeni sekmede aç
+IsnetDocumentLoading=Belge görüntüsü İşNet'ten alınıyor…
+IsnetDocumentHint=Belge, gönderenin şablonuyla İşNet'in ürettiği görüntüdür; ilk açılışta indirilip sunucuda saklanır.
+IsnetLinesCount=Satırlar (%s)
+IsnetRenderingFailed=Belge görüntüsü alınamadı: %s
+IsnetRenderingNotAvailable=İşNet bu belge için görüntü döndürmedi
+IsnetShow=Göster

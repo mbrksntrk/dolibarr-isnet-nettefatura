@@ -421,3 +421,17 @@ IsnetSt_Otomatik_Onaylandi=Auto-approved
 IsnetSt_Iade_Edildi=Returned
 IsnetSt_Reddedildi=Rejected
 IsnetSt_Basariyla_Tamamlandi=Completed
+
+# 0.6.1 - simpler incoming screen and document preview
+IsnetMoreFilters=More filters
+IsnetResetFilters=Reset
+IsnetResetFiltersHint=Removes every filter and goes back to the last 30 days
+IsnetPreview=View the invoice (without importing)
+IsnetDownloadPdf=Download PDF
+IsnetOpenPdf=Open the PDF in a new tab
+IsnetDocumentLoading=Fetching the document view from İşNet…
+IsnetDocumentHint=This is the integrator's rendering with the sender's template; it is downloaded on first view and kept on the server.
+IsnetLinesCount=Lines (%s)
+IsnetRenderingFailed=Could not get the document view: %s
+IsnetRenderingNotAvailable=İşNet returned no rendering for this document
+IsnetShow=Show

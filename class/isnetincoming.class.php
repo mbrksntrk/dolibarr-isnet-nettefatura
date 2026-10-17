@@ -257,6 +257,12 @@ class IsnetIncoming
 	private function buildWhere($f)
 	{
 		$db = $this->db;
+		// Drop-downs post -1 for their empty choice: that means "any", never a value to match.
+		foreach (array('scenario', 'type', 'status', 'detail_status', 'approval', 'currency', 'vendor', 'unlinked') as $k) {
+			if (isset($f[$k]) && (string) $f[$k] === '-1') {
+				unset($f[$k]);
+			}
+		}
 		$w = array('entity IN ('.getEntity('supplier_invoice').')');
 		$w[] = "doc_kind = '".$db->escape(!empty($f['kind']) ? $f['kind'] : 'INVOICE')."'";
 		if (!empty($f['unlinked'])) {
@@ -921,13 +927,8 @@ class IsnetIncoming
 				return 0;
 			}
 		}
-		$client = new IsnetClient($this->db);
-		$list = $client->searchInvoice(array('Ettn' => $this->ettn, 'ResultSet' => IsnetClient::resultSet(array('IsPDFIncluded'))), 'Incoming');
-		$pdf = (string) ($list[0]->InvoicePdf ?? '');
-		if ($pdf !== '' && strpos($pdf, '%PDF') !== 0 && base64_decode($pdf, true) !== false) {
-			$pdf = base64_decode($pdf);
-		}
-		if (strpos($pdf, '%PDF') !== 0) {
+		$pdf = $this->rendering('pdf');
+		if ($pdf === '') {
 			return 0;
 		}
 		$dir = $conf->fournisseur->facture->dir_output.'/'.get_exdir($inv->id, 2, 0, 0, $inv, 'invoice_supplier').dol_sanitizeFileName($inv->ref);
@@ -938,6 +939,55 @@ class IsnetIncoming
 		}
 		dolChmod($path);
 		return 1;
+	}
+
+	/**
+	 * The integrator's rendering of the document (HTML view or PDF), so it can be read before import.
+	 * Both are asked for in one call and kept under the module's document dir: documents never change
+	 * after issue, and later views must not depend on the integrator being reachable.
+	 *
+	 * @param  string $format 'html' | 'pdf'
+	 * @return string Content, '' when unavailable (see $this->error)
+	 */
+	public function rendering($format = 'html')
+	{
+		global $conf;
+		$format = $format === 'pdf' ? 'pdf' : 'html';
+		if ($this->ettn === '' || $this->doc_kind !== 'INVOICE') {
+			return '';
+		}
+		$dir = (!empty($conf->isnetefatura->dir_output) ? $conf->isnetefatura->dir_output : DOL_DATA_ROOT.'/isnetefatura').'/incoming';
+		$base = $dir.'/'.dol_sanitizeFileName($this->ettn);
+		if (is_readable($base.'.'.$format) && filesize($base.'.'.$format) > 0) {
+			return (string) file_get_contents($base.'.'.$format);
+		}
+
+		$client = new IsnetClient($this->db);
+		$list = $client->searchInvoice(array('Ettn' => $this->ettn, 'ResultSet' => IsnetClient::resultSet(array('IsHtmlIncluded', 'IsPDFIncluded'))), 'Incoming');
+		if ($client->error !== '') {
+			$this->error = $client->error;
+			return '';
+		}
+		$got = array('html' => (string) ($list[0]->InvoiceHtml ?? ''), 'pdf' => (string) ($list[0]->InvoicePdf ?? ''));
+		if ($got['pdf'] !== '' && strpos($got['pdf'], '%PDF') !== 0 && base64_decode($got['pdf'], true) !== false) {
+			$got['pdf'] = base64_decode($got['pdf']);
+		}
+		if (strpos($got['pdf'], '%PDF') !== 0) {
+			$got['pdf'] = '';
+		}
+		if ($got['html'] !== '' && stripos($got['html'], '<') === false && base64_decode($got['html'], true) !== false) {
+			$got['html'] = base64_decode($got['html']);
+		}
+		dol_mkdir($dir);
+		foreach ($got as $ext => $content) {
+			if ($content !== '' && file_put_contents($base.'.'.$ext, $content) !== false) {
+				dolChmod($base.'.'.$ext);
+			}
+		}
+		if ($got[$format] === '') {
+			$this->error = 'IsnetRenderingNotAvailable';
+		}
+		return $got[$format];
 	}
 
 	/* ------------------------------------------------------------------ reply */
